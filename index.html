@@ -3,19 +3,89 @@
   AI Statechart: interactive demonstration of the Linear Statechart Notation
   Copyright (c) 2026 Quantum Leaps, LLC. MIT License (see LICENSE).
   Paper: M. Samek, "State Machine Modeling for the AI Era: The Linear
-  Statechart Notation", 2026, https://doi.org/10.5281/zenodo.24519411
+  Statechart Notation", 2026, https://doi.org/10.5281/zenodo.24519410
   https://github.com/QuantumLeaps/ai-statechart
 -->
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AI Statechart: Linear Statechart Notation (interactive demo)</title>
+<meta name="description" content="Statecharts drawn as an outline of rows, computed from a model with no geometry, so that people and AI assistants can work on the same state machine. Interactive demo and open paper.">
+<link rel="canonical" href="https://www.state-machine.com/ai-statechart/">
+<!-- link previews (LinkedIn, X, Slack, Discord, ...) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="state-machine.com">
+<meta property="og:title" content="Linear Statechart Notation: state machine modeling for the AI era">
+<meta property="og:description" content="Statecharts drawn as an outline of rows, computed from a model with no geometry, so that people and AI assistants can work on the same state machine. Interactive demo and open paper.">
+<meta property="og:url" content="https://www.state-machine.com/ai-statechart/">
+<meta property="og:image" content="https://www.state-machine.com/ai-statechart/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A toaster-oven statechart drawn conventionally (left) and in the Linear Statechart Notation (right)">
+<meta name="twitter:card" content="summary_large_image">
 <style>
-  html, body { margin: 0; height: 100%; font-family: "Segoe UI", Arial, sans-serif; font-size: 13px;
+  html, body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; font-size: 13px;
                font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
-  body { display: flex; flex-direction: column; }
-  #bar { padding: 5px 10px; color: #444; border-bottom: 1px solid #ddd; display: flex; gap: 10px;
-         align-items: center; flex-wrap: nowrap; white-space: nowrap; }
+  /* the demo fills the window; the intro sits above it */
+  #app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; border-top: 1px solid #ddd; }
+  /* desktop: the page itself never scrolls; the intro and the demo share the
+     window, so each pane (drawing, XML) has the only scrollbar it needs */
+  @media (min-width: 761px) {
+    html, body { height: 100%; }
+    body { display: flex; flex-direction: column; overflow: hidden; }
+    #intro { flex: none; max-height: 45vh; overflow: auto; }
+    #app { flex: 1; min-height: 0; height: auto; }
+  }
+  /* phones: the drawing grows with the page, so the page scrollbar is the only
+     vertical one (the XML, when shown, keeps its own fixed-height box) */
+  @media (max-width: 760px) {
+    #app { height: auto; }
+    #main, #center { flex: none; }
+    #diagram { flex: none; overflow-x: auto; overflow-y: hidden; }
+    #xmlpane { flex: none !important; height: 60vh !important; }
+  }
+
+  /* ---- intro (explainer): one column ---- */
+  #intro { padding: 12px 20px; background: #fafbfc; color: #333; font-size: 14px; line-height: 1.45; }
+  #intro > * { max-width: 900px; }
+  #intro h1 { font-size: 22px; margin: 0 0 6px; color: #222; }
+  #intro h1 .sub { color: #c62828; font-weight: 600; }
+  #intro p { margin: 4px 0; }
+  #intro .links { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  #intro .links a { text-decoration: none; border: 1px solid #1a73e8; color: #1a73e8; border-radius: 4px;
+                    padding: 3px 10px; font-size: 13px; white-space: nowrap; }
+  #intro .links a.primary { background: #1a73e8; color: #fff; }
+  #intro .links a:hover { background: #e8f0fe; }
+  #intro .links a.primary:hover { background: #1557b0; }
+  /* "Try it below": the call to action, made to stand out */
+  #intro .try { margin: 8px 0 6px; padding: 8px 14px 8px 12px; background: #e8f0fe; border: 1px solid #c6dafc;
+                border-left: 5px solid #1a73e8; border-radius: 4px; color: #1f2d3d; display: inline-block; max-width: 1250px; }
+  #intro .try b.head { color: #1a73e8; font-size: 15px; }
+  #intro .try ul { margin: 4px 0 0; padding-left: 20px; }
+  #intro .try li { margin: 2px 0; }
+  #intro .try li::marker { color: #1a73e8; }
+  /* quick guide: folded by default */
+  #guide { margin-top: 6px; }
+  #guide[hidden] { display: none; }
+  #guideLink { font-weight: 600; color: #1a73e8; }
+  #guide h3 { font-size: 12px; margin: 10px 0 2px; color: #c62828; text-transform: uppercase; letter-spacing: 0.5px; }
+  #guide ul { margin: 0; padding-left: 18px; }
+  #guide li { margin: 2px 0; }
+  @media (max-width: 760px) { #intro { padding: 12px 14px; } #intro h1 { font-size: 20px; } }
+  .ro-only { display: none; }
+  body.readonly .ro-only { display: inline; }
+  body.readonly .rw-only { display: none !important; }
+  @media (max-width: 760px) {
+    #main { flex-direction: column; }
+    #xmlpane { width: auto !important; height: 40%; border-left: 0; border-top: 1px solid #ddd; }
+    #splitter { display: none; }
+  }
+  #bar { padding: 4px 10px; color: #444; border-bottom: 1px solid #ddd; display: flex;
+         flex-direction: column; gap: 4px; }
+  #bar .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; white-space: nowrap; min-height: 24px; }
+  #bar .row2 { flex-wrap: nowrap; }
+  #editBtns button { min-width: 64px; }
   #bar button, #bar select { font: inherit; font-size: 12px; }
   #levels button { min-width: 26px; padding: 1px 4px; }
   #levels button.on { background: #1a73e8; color: #fff; border: 1px solid #1a73e8; border-radius: 3px; }
@@ -94,8 +164,14 @@
   .dragline { stroke: #2e7d32; stroke-width: 2; stroke-dasharray: 4 3; }
 
   /* ---- column 3: the XML document (the model) ---- */
-  #xmlpane { width: 42%; flex: none; display: flex; border-left: 1px solid #ddd; background: #fff; min-width: 0; }
+  #xmlpane { width: 42%; flex: none; display: flex; background: #fff; min-width: 0; }
   #xmlpane[hidden] { display: none; }
+  /* draggable divider between the drawing and the XML */
+  #splitter { width: 6px; flex: none; cursor: col-resize; background: #f1f3f4; border-left: 1px solid #ddd;
+              border-right: 1px solid #ddd; touch-action: none; }
+  #splitter:hover, #splitter.drag { background: #c6dafc; }
+  #splitter[hidden] { display: none; }
+  body.resizing { cursor: col-resize; user-select: none; }
   #gutter, #hl, #xml { font: 12px/18px Consolas, "Cascadia Mono", monospace; }
   #gutter { width: 3.6em; flex: none; overflow: hidden; color: #aaa; text-align: right; background: #fafafa;
             border-right: 1px solid #eee; padding: 4px 6px 4px 0; white-space: pre; }
@@ -116,13 +192,70 @@
   #problems .p:hover { background: #eef2f7; }
   #problems .error { color: #b00020; }
   #problems .warning { color: #9a6700; }
-  #help { border-top: 1px solid #eee; padding: 3px 10px; color: #777; font-size: 12px; }
   kbd { font: 11px Consolas, monospace; border: 1px solid #ccc; border-radius: 3px; padding: 0 3px; background: #f7f7f7; }
 </style>
 </head>
 <body>
+<header id="intro">
+ <h1>Linear Statechart Notation: <span class="sub">State machine modeling for the AI era</span></h1>
+ <p>Conventional statechart diagrams tie the behavior to <b>geometry</b>: every box position and arrow route is stored with the model. For an AI that reads and writes models as text, that geometry is noise; for people, it is the essence. The Linear Statechart Notation keeps the drawing and removes the free geometry.</p>
+ <div class="links">
+  <a class="primary" href="https://doi.org/10.5281/zenodo.24519410" target="_blank" title="M. Samek, State Machine Modeling for the AI Era: The Linear Statechart Notation (preprint, Zenodo)">Read the paper</a>
+  <a href="https://github.com/QuantumLeaps/ai-statechart" target="_blank" title="Source code (MIT license); issues for feedback">GitHub</a>
+  <a href="https://www.state-machine.com" target="_blank" title="Quantum Leaps: QP real-time frameworks and the QM modeling tool">state-machine.com</a>
+ </div>
+ <div class="try">
+  <b class="head">Try the interactive demo below:</b>
+  <ul>
+   <li>Pick a model from the drop-down box (the toaster oven, the PELICAN crossing, or a test model with every kind of transition), or open your own <code>.qmodel</code> file.</li>
+   <li>Hover over the drawing: each state or transition lights up, together with its lines in the XML, so you can see exactly which text produces which part of the drawing.</li>
+   <li>Click an element in the drawing or in the XML, and the other view follows; a selected transition lights the states it exits and the state it enters.<span class="rw-only"> Then move it (Up/Down), delete it, or edit the XML: the drawing redraws instantly, and Undo takes back any step.</span></li>
+   <li>Open the <a href="#" id="guideLink" title="Show or hide the quick guide">Quick guide</a> for folding, outline levels, keyboard shortcuts, and all the ways to edit in the drawing.</li>
+  </ul>
+  <span class="ro-only"><i>On a phone the demo is read-only; open this page in a desktop browser to edit models.</i></span>
+ </div>
+ <div id="guide" hidden>
+    <h3>Read the drawing</h3>
+    <ul>
+      <li>Each state is a row with a red <b>rail</b>; substates are indented under it, with a vertical <b>nesting guide</b>.</li>
+      <li>Under each state: entry/exit, initial transition (filled ball), history (H or H*) and one row per <b>trigger</b>.</li>
+      <li>Each transition runs in a vertical <b>lane</b> and ends with an arrowhead on its target's rail. A dot is a junction; a square end means an internal transition. Diamonds are choices.</li>
+    </ul>
+    <h3>Explore</h3>
+    <ul>
+      <li><b>Click</b> a row to select it: a state lights its transitions; a transition lights the states it exits and the state it enters.</li>
+      <li>Click a triangle or diamond to <b>fold</b>. <b>Level</b> buttons (keys <kbd>1</kbd>...<kbd>9</kbd>, <kbd>0</kbd> = all) show the machine down to that depth.</li>
+      <li><kbd>Up</kbd>/<kbd>Down</kbd> move between rows. <b>Actions</b> shows the action code (or its brief: a leading <code>// comment</code>).</li>
+    </ul>
+    <div class="rw-only">
+    <h3>Edit in the drawing</h3>
+    <ul>
+      <li><b>Up</b>/<b>Down</b> buttons (<kbd>Alt+Up</kbd>/<kbd>Alt+Down</kbd>): move a state among its siblings, a transition within its state, a choice segment among its siblings.</li>
+      <li><b>Delete</b> (<kbd>Del</kbd>): delete a state with its substates (transitions into it become internal), a transition, a choice segment, an entry/exit action or a history.</li>
+      <li><kbd>F2</kbd> rename a state or trigger, or edit a guard. <kbd>t</kbd> new transition. <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> move a state under its previous sibling / out of its superstate.</li>
+      <li><b>Drag an arrowhead</b> onto another state's rail to retarget it; drop it elsewhere (or <kbd>i</kbd>) to make it internal. Drag a square end onto a rail to attach it.</li>
+      <li><kbd>c</kbd> adds a choice segment to a square end (a guard, or <code>else</code>).</li>
+      <li><kbd>Shift+H</kbd> cycles a state's history (none, shallow, deep); drop an arrowhead on an H row, or press <kbd>h</kbd>, to enter through history.</li>
+    </ul>
+    </div>
+    <h3>Edit the text</h3>
+    <ul>
+      <li><b>Show XML</b> displays the model file: the only copy of the model. Select in either view; the other follows.</li>
+      <li>Type in the XML: the drawing follows every edit. Changed lines flash; problems are listed below the drawing.</li>
+      <li>Every edit, in the drawing or in the text, is one step of a single <b>Undo</b>/<b>Redo</b> stack (<kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd>).</li>
+      <li>Open your own <code>.qmodel</code> file from the model list, and <b>Download</b> the edited one.</li>
+    </ul>
+    <h3>More</h3>
+    <ul>
+      <li>The <a href="https://doi.org/10.5281/zenodo.24519410" target="_blank">paper</a> specifies the notation and the QModel file format.</li>
+      <li>Questions and feedback: <a href="https://github.com/QuantumLeaps/ai-statechart/issues" target="_blank">GitHub issues</a>.</li>
+    </ul>
+ </div>
+</header>
+<div id="app">
 <div id="bar">
-  <b>Linear Statechart Notation</b> <a href="https://doi.org/10.5281/zenodo.24519411" target="_blank" title="The paper">(paper)</a>
+ <div class="row">
+  <b>Model:</b>
   <select id="modelSel">
     <option value="toaster">toaster.qmodel (toaster oven)</option>
     <option value="pelican">pelican.qmodel (PELICAN crossing)</option>
@@ -131,77 +264,44 @@
   </select>
   <input type="file" id="fileIn" accept=".qmodel,.xml" hidden>
   <button id="download" title="Save the current text as a .qmodel file">Download</button>
-  <span class="sep"></span>
-  <button id="undoBtn">Undo</button><button id="redoBtn">Redo</button>
-  <span class="sep"></span>
+  <span class="sep rw-only"></span>
+  <span class="rw-only"><button id="undoBtn" title="Undo (Ctrl+Z)">Undo</button><button id="redoBtn" title="Redo (Ctrl+Y)">Redo</button></span>
+  <span class="sep rw-only"></span>
+  <span id="editBtns" class="rw-only">
+    <button id="upBtn" disabled>&uarr; Up</button>
+    <button id="downBtn" disabled>&darr; Down</button>
+    <button id="delBtn" disabled>&times; Delete</button>
+  </span>
+ </div>
+ <div class="row row2">
   <label><input type="checkbox" id="showActions"> Actions</label>
-  <label title="Vertical lines connecting the states of one level"><input type="checkbox" id="showTree" checked> Tree lines</label>
   <span id="levels" title="Show the statecharts down to this outline level (keys 1-9; 0 = all). Packages and classes are not affected."></span>
   <span class="sep"></span>
   <label><input type="checkbox" id="showXml"> Show XML</label>
   <span id="prompt" hidden><span id="pLabel"></span> <input id="pInput"></span>
   <span id="status"></span>
+ </div>
 </div>
 <div id="main">
   <div id="center">
     <div id="banner" hidden></div>
     <div id="diagram" tabindex="0"><svg id="svg"></svg></div>
   </div>
+  <div id="splitter" hidden title="Drag to resize; double-click to reset"></div>
   <div id="xmlpane" hidden>
     <div id="gutter"></div>
     <div id="editor"><div id="hl"></div><textarea id="xml" spellcheck="false" wrap="off"></textarea></div>
   </div>
 </div>
 <div id="problems"></div>
-<div id="help">
-  One view for the whole model: packages, classes, members, statecharts, files. Select here or in the XML: the other follows.
-  <kbd>F2</kbd> rename &nbsp; <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent/outdent state &nbsp;
-  <kbd>t</kbd> new transition &nbsp; <kbd>Shift+H</kbd> history of a state (none/shallow/deep) &nbsp;
-  <kbd>h</kbd> enter the target through its history, or not &nbsp; drop an arrowhead on a history row (H/H*): via history &nbsp; <kbd>c</kbd> choice segment on a dangling end (guard, or "else") &nbsp;
-  <kbd>F2</kbd> on a segment: edit guard &nbsp; <kbd>Ctrl+Up</kbd>/<kbd>Ctrl+Down</kbd> reorder segments &nbsp;
-  <kbd>Del</kbd> delete transition or segment &nbsp;
-  drag an arrowhead to another state line (drop anywhere else, or <kbd>i</kbd>: internal) &nbsp; drag a dangling end's square onto a state line &nbsp;
-  <kbd>Up</kbd>/<kbd>Down</kbd> move between rows &nbsp; a leading comment <code>// text</code> in an action or guard is its brief on the diagram &nbsp;
-  <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> undo/redo (one stack for gestures and typing) &nbsp;
-  click a triangle or diamond to fold &nbsp; <kbd>1</kbd>...<kbd>9</kbd> show down to that level, <kbd>0</kbd> all levels
 </div>
 
 <script type="text/plain" id="ex-toaster"><?xml version="1.0" encoding="UTF-8"?>
 <model format="qmodel-1" framework="qpc">
     <doc><![CDATA[
-Demonstration of transitions to shallow history and deep history
-in QHsm-style state machines (toaster oven).
-Converted by hand from qpc\examples\posix-win32\history_qhsm\history.qm.
+Toaster oven from the paper "State Machine Modeling for the AI Era:
+The Linear Statechart Notation" (Fig. 3); the same state machine as in Fig. 1.
     ]]></doc>
-
-<package name="App">
-
-    <attribute name="AppSignals" type="enum" visibility="public">
-    <code><![CDATA[
-{
-    OPEN_SIG = Q_USER_SIG,
-    CLOSE_SIG,
-    TOAST_SIG,
-    BAKE_SIG,
-    OFF_SIG,
-    TERMINATE_SIG // terminate the application
-};
-    ]]></code>
-    </attribute>
-
-    <attribute name="SM_ToastOven" type="QAsm * const" visibility="public">
-    <code><![CDATA[
-= (QAsm *)&ToastOven_inst;
-    ]]></code>
-    </attribute>
-
-<operation name="ToastOven_ctor" type="void" visibility="public">
-    <code><![CDATA[
-ToastOven *me = &ToastOven_inst;
-QHsm_ctor(&me->super, Q_STATE_CAST(&ToastOven_initial));
-    ]]></code>
-</operation>
-</package>
 
 <package name="SMs">
 
@@ -209,8 +309,6 @@ QHsm_ctor(&me->super, Q_STATE_CAST(&ToastOven_initial));
     <doc><![CDATA[
 Oven state machine
     ]]></doc>
-
-    <attribute name="inst" type="ToastOven" visibility="public" modifiers="static"/>
 
 <statechart>
     <initial target="doorClosed">
@@ -223,9 +321,10 @@ Oven state machine
     <entry><![CDATA[
 PRINTF_S("%s;", "door-Closed");
     ]]></entry>
+    <exit><![CDATA[
+    ]]></exit>
     <initial target="off"/>
     <history type="shallow" target="off"/>
-    <tran trig="TERMINATE" target="final"/>
     <tran trig="OPEN" target="doorOpen"/>
     <tran trig="TOAST" target="toasting"/>
     <tran trig="BAKE" target="baking"/>
@@ -244,7 +343,6 @@ PRINTF_S("%s;", "heater-Off");
 PRINTF_S("%s;", "heating-init");
     ]]></action>
     </initial>
-    <history type="deep" target="baking"/>
 </state>
 
 <state name="toasting" super="heating">
@@ -273,62 +371,10 @@ PRINTF_S("%s;", "door-Open,lamp-On");
 PRINTF_S("%s;", "lamp-Off");
     ]]></exit>
     <tran trig="CLOSE" target="doorClosed" via="history"/>
-    <tran trig="TERMINATE" target="final"/>
-    <tran trig="OFF" target="heating" via="history"/>
-</state>
-
-<state name="final">
-    <entry><![CDATA[
-QF_onCleanup();
-exit(0);
-    ]]></entry>
 </state>
 </statechart>
 </class>
 </package>
-
-<file path="app.h">
-    <text><![CDATA[
-#ifndef APP_H_
-#define APP_H_
-
-$declare ${App}
-
-#endif // APP_H_
-    ]]></text>
-</file>
-
-<file path="bsp.h">
-    <text><![CDATA[
-#ifndef BSP_H_
-#define BSP_H_
-
-#define BSP_TICKS_PER_SEC    100U
-
-void BSP_init(void const * const arg);
-void BSP_showMsg(char const * const msg);
-
-#endif // BSP_H_
-    ]]></text>
-</file>
-
-<file path="history.c">
-    <text><![CDATA[
-#include "qpc.h"
-#include "bsp.h"
-#include "app.h"
-
-#include "safe_std.h" // portable "safe" <stdio.h>/<string.h> facilities
-#include <stdlib.h>   // for exit()
-
-//Q_DEFINE_THIS_FILE
-
-$declare ${SMs::ToastOven}
-
-$define ${App}
-$define ${SMs::ToastOven}
-    ]]></text>
-</file>
 
 </model>
 </script>
@@ -788,22 +834,21 @@ BSP_display("s211-D;");
 </model>
 </script>
 
-<!-- the same reader/writer/checker and gestures that the Node tests use -->
+<!-- the model reader/writer/checker and the editing operations -->
 <script src="js/qmodel-xml.js"></script>
 <script src="js/ops.js"></script>
 
 <script>
 "use strict";
 // =====================================================================
-// QModel spike 7: ONE combined outline view of the whole model (packages,
-// classes, members, statecharts with the linear notation, files); the separate
-// explorer of spike 6 is gone. Architecture rehearsal for the VS Code extension:
-//  - the XML text is the ONLY copy of the model (in VS Code: the document);
-//  - tree and diagram are rebuilt from the text after every change;
-//  - every gesture is computed from the current text by ops.js and applied
-//    as one line edit on one undo stack, shared with typing in the XML pane
-//    (in VS Code: one WorkspaceEdit on the document's own undo stack);
-//  - broken XML: the views keep the last valid version, gestures are off.
+// AI Statechart demo: ONE outline view of the whole model (packages, classes,
+// members, statecharts in the Linear Statechart Notation, files).
+//  - the XML text is the ONLY copy of the model;
+//  - the drawing is rebuilt from the text after every change;
+//  - every editing operation in the drawing is computed from the current text
+//    by ops.js and applied as one line edit on one undo stack, shared with
+//    typing in the XML pane;
+//  - broken XML: the drawing keeps the last valid version, editing is off.
 // View state (folding, selection) is NOT in the text.
 // =====================================================================
 const Q = window.qmodelXml, OPS = window.qmodelOps;
@@ -826,7 +871,6 @@ let hoverKey = null;
 const folded = new Set();    // keys of folded states and choice points
 let showActions = false;
 let hideCode = false;
-let showTree = true;          // vertical lines connecting sibling states (view option)
 let flashLines = new Set();
 let flashTimer = null;
 
@@ -851,10 +895,15 @@ function commit(label, edits, source, coalesceWith) {
   setText(r.text, r.inverse, source);
 }
 
-// Run a gesture: ops.js computes line edits from the CURRENT text.
+// On phones and small touch screens the demo is read-only (view, fold, select).
+const readOnly = window.matchMedia("(max-width: 760px), (hover: none) and (pointer: coarse)").matches;
+if (readOnly) document.body.classList.add("readonly");
+
+// Run an editing operation: ops.js computes line edits from the CURRENT text.
 function gesture(label, make) {
+  if (readOnly) { status("The demo is read-only on this device; editing needs a desktop browser.", true); return false; }
   if (broken) {
-    status("The XML has a syntax error: gestures are off until it is fixed or undone.", true);
+    status("The XML has a syntax error: editing in the drawing is off until it is fixed or undone.", true);
     return false;
   }
   let edits;
@@ -1089,7 +1138,7 @@ function startRename(key) {
   }
   if (!["state", "tran", "attribute", "operation"].includes(kind)) {
     status(kind === "class" || kind === "package"
-      ? "Renaming classes and packages also rewrites ${...} directives (decision 7); not in this spike."
+      ? "Renaming classes and packages also rewrites ${...} directives; not in this demo."
       : "Nothing to rename here.", true);
     return;
   }
@@ -1124,7 +1173,7 @@ const hasBranches = (n) => n.children.some((c) => c.tag === "choice" || c.tag ==
 
 // One outline for the whole model. Structure rows (packages, classes, members,
 // statecharts, files) and behavior rows (states, transitions) use the same
-// indentation, folding, selection and gestures. Each class's statechart is a
+// indentation, folding, selection and editing. Each class's statechart is a
 // section of the outline; lanes never cross sections, so one global lane
 // assignment serves all statecharts.
 function layoutModel() {
@@ -1190,7 +1239,7 @@ function layoutModel() {
     r.index = i;
     r.y = MARGIN + 10 + i * ROW;
     r.x = MARGIN + r.depth * INDENT;
-    // Briefs (QM's "brief", 2026-11-19): if an action or guard starts with a
+    // Briefs (as in QM): if an action or guard starts with a
     // comment ("// text"), the diagram shows its text, without the "//", instead
     // of the code, always (also with Actions off). Without a brief, Actions shows
     // the first code line.
@@ -1228,7 +1277,7 @@ function layoutModel() {
         break;
       }
     }
-    // Choice rendering (user's sketch, 2026-11-19):
+    // Choice rendering:
     //   <> TIMEOUT                 the diamond leads the trigger row
     //      |                       a spine drops from under the trigger label
     //      +--[guard1] ----[]      each branch hangs from the spine
@@ -1247,7 +1296,7 @@ function layoutModel() {
     r.textX = r.x + lead;
     r.labelEnd = r.textX + r.parts.reduce((w, [s, cls]) => w + textWidth(s, /trig|sname|mname/.test(cls)), 0);
     // the spine drops from under the fold marker / diamond (x + 4), not from under
-    // the label, so it never touches descenders (p, y, g) of the label (user, 2026-11-20)
+    // the label, so it never touches descenders (p, y, g) of the label
     if (r.hasChoice) r.spineX = r.x + 4;
   });
 
@@ -1304,7 +1353,7 @@ function tagClass(r) {
   if (!isTranRow(r)) return "";
   return "tr t-" + uid(r.el) + (r.parentRow ? " b-" + uid(r.parentRow.el) : "");
 }
-// ONE focus rule for hover and selection (user, 2026-11-19). The focused
+// ONE focus rule for hover and selection. The focused
 // element is the hovered one while the mouse is over a row that has a focus,
 // otherwise the selected one.
 //  - transition / segment / initial / history: its path (row, lane, arrow,
@@ -1360,6 +1409,7 @@ svg.addEventListener("mouseleave", () => hoverOn(null));
 function renderDiagram() {
   svg.replaceChildren();
   renderLevels();
+  updateEditButtons();
   if (!idx) return;
   const L = layoutModel();
   lastLayout = L;
@@ -1474,17 +1524,18 @@ function renderDiagram() {
     }
   }
 
-  // tree lines: for every visible state, a segment from its superstate's row
-  // (or the top of the diagram) down to its own row, ending in a short tick
-  // at its fold marker. Siblings share the vertical line. Each segment carries
-  // the state's s-<uid> class, so hover highlights it like the state's rail.
-  // (structure rows get the same tree lines, in grey: packages > classes > members > SM > states)
-  if (showTree) {
+  // nesting guides (always drawn; Section 2.2 of the paper): for every visible
+  // state, a segment from its superstate's row (or the top of the diagram) down
+  // to its own row, ending in a short tick at its fold marker. Siblings share the
+  // vertical line. Each segment carries the state's s-<uid> class, so hover
+  // highlights it like the state's rail. Only states get guides, never choices,
+  // packages, classes or members.
+  {
     for (const r of L.rows) {
-      if (!("tparent" in r)) continue;
+      if (!("tparent" in r) || r.kind !== "state") continue;
       const pr = r.tparent;
       // the vertical runs under the superstate's fold marker (its x + 4), well left of
-      // the superstate's name, so it never touches its descenders (user, 2026-11-20)
+      // the superstate's name, so it never touches its descenders
       const x = r.x - INDENT + 4, y0 = pr ? pr.y + 7 : MARGIN - 6;
       const ss = r.el === selNode ? " sel" : "";
       const cls = r.kind === "state" ? `vline s-${uid(r.el)}${ss}` : "vline mline";
@@ -1529,16 +1580,16 @@ function renderDiagram() {
 }
 function toggle(k) { if (folded.has(k)) folded.delete(k); else folded.add(k); renderDiagram(); }
 
-// ---- drag an arrowhead to another state line: one gesture, one line edit
+// ---- drag an arrowhead to another state line: one operation, one line edit
 let drag = null;
 function svgY(ev) { return ev.clientY - svg.getBoundingClientRect().top; }
 function startDrag(ev, link) {
-  if (broken) { status("Gestures are off while the XML has a syntax error.", true); return; }
+  if (broken) { status("Editing in the drawing is off while the XML has a syntax error.", true); return; }
   ev.preventDefault(); ev.stopPropagation();
   select(K(link.row.el));
   const L = lastLayout;
   const line = el("line", { x1: link.x, y1: link.row.y, x2: link.x, y2: svgY(ev), class: "dragline" }, svg);
-  // history (user, 2026-11-20): a transition or choice segment can also be dropped
+  // history: a transition or choice segment can also be dropped
   // on a state's HISTORY ROW, which connects it through that history (via="history")
   const canHist = ["tran", "choice", "else"].includes(link.row.el.tag);
   if (canHist) svg.querySelectorAll(".hrow").forEach((x) => x.classList.add("droptarget"));
@@ -1664,6 +1715,7 @@ function goToLine(line) {
 }
 function showXml(on) {
   $("xmlpane").hidden = !on;
+  $("splitter").hidden = !on;
   renderXml();
   if (on && node(sel)) scrollXmlTo(node(sel).line);
   syncScroll();
@@ -1692,7 +1744,7 @@ function renderBanner() {
   b.hidden = false;
   b.replaceChildren(
     document.createTextNode(`Syntax error at line ${broken.line}: ${broken.msg}. ` +
-      `Showing the last valid version; gestures are off.`));
+      `Showing the last valid version; editing in the drawing is off.`));
   const go = document.createElement("button");
   go.textContent = "Go to error";
   go.onclick = () => goToLine(broken.line);
@@ -1777,17 +1829,96 @@ function editGuard(n) {
   });
 }
 
+// ------------------------------------------- Up / Down / Delete buttons --
+// The edit that the Up, Down or Delete button (what: -1, +1, "del") would make
+// on element n: { label, make(text) -> edits, after() } or null if none applies.
+// A button is enabled only when its edit applies to the current text.
+function editPlan(n, what) {
+  if (!n) return null;
+  const st = n.tag === "state" ? n : ownerState(n);
+  const cn = clsName(n), sn = st && attr(st, "name"), sk = st && K(st);
+  const del = what === "del", dir = what;
+  switch (n.tag) {
+    case "state": {
+      if (del) {
+        const sup = infoOf(n).byName.get(attr(n, "super")), supKey = sup ? K(sup) : null;
+        return { label: `delete state ${sn}${infoOf(n).states.some((x) => attr(x, "super") === sn) ? " with its substates" : ""}`, make: (t) => OPS.deleteState(t, cn, sn),
+                 after: () => select(supKey) };
+      }
+      return { label: `move state ${sn} ${dir < 0 ? "up" : "down"}`, make: (t) => OPS.moveState(t, cn, sn, dir),
+               after: () => select(sk) };
+    }
+    case "tran": {
+      const ts = kids(st, "tran"), ti = ts.indexOf(n), trig = attr(n, "trig");
+      if (del) {
+        const nth = ts.filter((x) => attr(x, "trig") === trig).indexOf(n);
+        return { label: `delete transition ${trig} in ${sn}`, make: (t) => OPS.deleteTran(t, cn, sn, trig, nth),
+                 after: () => select(sk) };
+      }
+      return { label: `move transition ${trig} ${dir < 0 ? "up" : "down"}`,
+               make: (t) => OPS.moveTran(t, cn, sn, ti, dir),
+               after: () => select("T:" + cn + ":" + sn + ":" + (ti + dir)) };
+    }
+    case "choice": case "else": {
+      const p = idx.parent.get(n), pk = K(p), line = n.line;
+      const i = p.children.filter((c) => c.tag === "choice" || c.tag === "else").indexOf(n);
+      const what2 = n.tag === "else" ? "else" : "choice";
+      if (del) return { label: `delete ${what2} segment of ${describe(p)}`, make: (t) => OPS.deleteBranch(t, line),
+                        after: () => select(pk) };
+      return { label: `move ${what2} segment ${dir < 0 ? "up" : "down"}`, make: (t) => OPS.moveBranch(t, line, dir),
+               after: () => select(pk + "." + (i + dir)) };
+    }
+    case "entry": case "exit":
+      if (!del) return null;
+      return { label: `delete ${n.tag} action of ${sn}`, make: (t) => OPS.deleteBlock(t, cn, sn, n.tag),
+               after: () => select(sk) };
+    case "history":
+      if (!del) return null;
+      return { label: `delete history of ${sn}`, make: (t) => OPS.setHistory(t, cn, sn, undefined),
+               after: () => select(sk) };
+  }
+  return null;
+}
+// null if the edit applies to the current text, else the reason why not
+function whyNot(plan) {
+  if (!plan) return "Select a state, transition, choice segment, entry/exit action or history.";
+  if (broken) return "The XML has a syntax error: fix it or undo first.";
+  try { plan.make(text); return null; } catch (e) { return e.message; }
+}
+function runEdit(what) {
+  const plan = editPlan(node(sel), what), why = whyNot(plan);
+  if (why) { status(why, true); return false; }
+  if (gesture(plan.label, plan.make)) { plan.after(); return true; }
+  return false;
+}
+function updateEditButtons() {
+  const n = node(sel);
+  for (const [id, what, name, key] of [["upBtn", -1, "Move up", "Alt+Up"],
+                                       ["downBtn", 1, "Move down", "Alt+Down"],
+                                       ["delBtn", "del", "Delete", "Del"]]) {
+    const plan = editPlan(n, what), why = whyNot(plan), b = $(id);
+    b.disabled = !!why;
+    b.title = why ? `${name} (${key}): ${why}` : `${plan.label} (${key})`;
+  }
+}
+$("upBtn").onclick = () => { runEdit(-1); $("diagram").focus(); };
+$("downBtn").onclick = () => { runEdit(1); $("diagram").focus(); };
+$("delBtn").onclick = () => { runEdit("del"); $("diagram").focus(); };
+
 document.addEventListener("keydown", (ev) => {
   const inXml = ev.target === $("xml");
   const inInput = ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT";
   const ctrl = ev.ctrlKey || ev.metaKey;
-  // ONE undo stack for gestures and typing (the browser's own textarea undo is bypassed)
+  // ONE undo stack for editing operations and typing (the browser's own textarea undo is bypassed)
   if (ctrl && !inInput && (ev.key === "z" || ev.key === "Z" || ev.key === "y")) {
     ev.preventDefault();
     if (ev.key === "y" || ev.shiftKey) redo(); else undo();
     return;
   }
   if (inXml || inInput) return;
+  // keys act on the demo only while it is in view (not while reading the intro)
+  if ($("intro").contains(ev.target) ||
+      (!$("app").contains(ev.target) && $("app").getBoundingClientRect().top > window.innerHeight / 2)) return;
   const n = node(sel);
   switch (ev.key) {
     case "Escape":
@@ -1813,24 +1944,10 @@ document.addEventListener("keydown", (ev) => {
       }
       break;
     }
-    case "Delete": case "Backspace": {
-      if (n && (n.tag === "choice" || n.tag === "else")) {
-        const p = idx.parent.get(n), pk = K(p), line = n.line;
-        if (gesture(`delete ${n.tag === "else" ? "else" : "choice"} segment of ${describe(p)}`,
-                    (t) => OPS.deleteBranch(t, line))) select(pk);
-        ev.preventDefault();
-        break;
-      }
-      if (!n || n.tag !== "tran") { status("Delete works on a selected transition or choice segment.", true); break; }
-      const st = ownerState(n);
-      const sk = K(st);
-      if (gesture(`delete transition ${attr(n, "trig")} in ${attr(st, "name")}`,
-                  (t) => OPS.deleteTran(t, clsName(st), attr(st, "name"), attr(n, "trig")))) {
-        select(sk);
-      }
+    case "Delete": case "Backspace":
       ev.preventDefault();
+      runEdit("del");
       break;
-    }
     case "t": case "T": ev.preventDefault(); openNewTran(); break;
     case "h": {                                   // enter the target through its history, or not
       ev.preventDefault();
@@ -1864,14 +1981,8 @@ document.addEventListener("keydown", (ev) => {
     case "ArrowDown": case "ArrowUp": {
       ev.preventDefault();
       const dir = ev.key === "ArrowDown" ? 1 : -1;
-      if ((ev.altKey || ev.ctrlKey || ev.metaKey) && n && (n.tag === "choice" || n.tag === "else")) {
-        // reorder segments: evaluation order is meaning
-        const p = idx.parent.get(n), pk = K(p);
-        const i = p.children.filter((c) => c.tag === "choice" || c.tag === "else").indexOf(n);
-        if (gesture(`move segment ${dir < 0 ? "up" : "down"}`, (t) => OPS.moveBranch(t, n.line, dir))) {
-          select(pk + "." + (i + dir));
-        }
-      } else moveSel(dir);
+      if (ev.altKey || ev.ctrlKey || ev.metaKey) runEdit(dir);   // move the selected item
+      else moveSel(dir);                                          // move the selection
       break;
     }
   }
@@ -1889,10 +2000,9 @@ $("xml").addEventListener("keydown", (ev) => {
 });
 $("showXml").onchange = (e) => showXml(e.target.checked);
 $("showActions").onchange = (e) => { showActions = e.target.checked; renderDiagram(); };
-$("showTree").onchange = (e) => { showTree = e.target.checked; renderDiagram(); };
 $("undoBtn").onclick = undo;
 $("redoBtn").onclick = redo;
-// Outline levels (user, 2026-11-20), instead of "Fold all" / "Unfold all".
+// Outline levels, instead of "Fold all" / "Unfold all".
 // The level of a row is its indentation within its statechart: top-level
 // states are level 1, everything a state owns (entry, exit, transitions) and
 // its substates are one level deeper, and choice segments one level deeper than
@@ -1980,7 +2090,56 @@ $("download").onclick = () => {
   URL.revokeObjectURL(a.href);
 };
 
+// ------------------------------------------- drawing / XML divider --
+// Dragging sets the width of the XML pane; both panes keep at least 200 px.
+(function () {
+  const sp = $("splitter"), pane = $("xmlpane");
+  let x0 = 0, w0 = 0;
+  const clamp = (w) => Math.max(200, Math.min(w, $("main").clientWidth - 200 - sp.offsetWidth));
+  const setW = (w) => { pane.style.width = clamp(w) + "px"; syncScroll(); };
+  try { const w = +localStorage.getItem("ai-statechart.xmlWidth"); if (w) pane.style.width = w + "px"; } catch (e) {}
+  const save = () => { try { localStorage.setItem("ai-statechart.xmlWidth", parseInt(pane.style.width) || ""); } catch (e) {} };
+  sp.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    sp.setPointerCapture(ev.pointerId);
+    x0 = ev.clientX; w0 = pane.getBoundingClientRect().width;
+    sp.classList.add("drag"); document.body.classList.add("resizing");
+  });
+  sp.addEventListener("pointermove", (ev) => {
+    if (!sp.classList.contains("drag")) return;
+    setW(w0 - (ev.clientX - x0));
+  });
+  const end = () => {
+    if (!sp.classList.contains("drag")) return;
+    sp.classList.remove("drag"); document.body.classList.remove("resizing");
+    save();
+  };
+  sp.addEventListener("pointerup", end);
+  sp.addEventListener("pointercancel", end);
+  sp.addEventListener("dblclick", () => {          // back to the default split
+    pane.style.width = "";
+    try { localStorage.removeItem("ai-statechart.xmlWidth"); } catch (e) {}
+    syncScroll();
+  });
+  // keep both panes usable when the window shrinks
+  window.addEventListener("resize", () => { if (pane.style.width) setW(parseInt(pane.style.width)); });
+})();
+
+// the "Quick guide" link in the intro shows and hides the guide
+$("guideLink").onclick = (ev) => {
+  ev.preventDefault();
+  const g = $("guide");
+  g.hidden = !g.hidden;
+  $("guideLink").textContent = g.hidden ? "Quick guide" : "Quick guide (hide)";
+};
+
+// ---------------------------------------------------------- defaults --
+if (readOnly) $("xml").readOnly = true;
+
 loadText(examples.toaster[1], examples.toaster[0]);
+// the XML is shown by default on desktops, hidden on phones
+$("showXml").checked = !readOnly;
+showXml(!readOnly);
 </script>
 </body>
 </html>

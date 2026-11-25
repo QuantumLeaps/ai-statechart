@@ -1,7 +1,8 @@
 /*
  * qmodel-xml.js - QModel file format 1 (XML form): reader, canonical writer,
- * checker. Spike, 2026-11-19. Plain JavaScript, no dependencies; runs in
- * Node and in the browser. Spec: Claude\QModel-XML-format-draft.md (0.3).
+ * checker. Part of the AI Statechart demo (MIT License, see LICENSE).
+ * Plain JavaScript, no dependencies; runs in Node and in the browser.
+ * Format: Section 3 of the paper, https://doi.org/10.5281/zenodo.24519410
  *
  *   node qmodel-xml.js check  <file>...   problems, exit code 1 on errors
  *   node qmodel-xml.js format <file>      canonical form to stdout
@@ -56,7 +57,7 @@ const ORDER = {
     model:      ['doc', 'package', 'file'],
     package:    ['doc', 'trace', 'attribute', 'operation', ['class', 'package']],
     class:      ['doc', 'trace', 'attribute', 'operation', 'statechart'],
-    attribute:  ['doc', 'trace', 'code'],   // code: enum body or initializer, as in QM (PROPOSED 2026-11-20)
+    attribute:  ['doc', 'trace', 'code'],   // code: enum body or initializer, as in QM
     operation:  ['doc', 'trace', 'param', 'code'],
     statechart: ['doc', 'initial', 'state'],
     state:      ['doc', 'trace', 'entry', 'exit', 'initial', 'history', 'tran'],

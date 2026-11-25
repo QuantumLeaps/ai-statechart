@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   QModel file format, version 1 (qmodel-1). Structural schema.
-  Draft 0.5, 2026-11-19. Companion to QModel-XML-format-draft.md.
+  Described in Section 3 of the paper, https://doi.org/10.5281/zenodo.24519410
 
   The schema checks structure, element order and attribute values only.
   Name resolution, hierarchy, targets, whitespace and canonical form are
-  checked by `qmodel check` (see the draft, sections 6 and 7).
+  checked by js/qmodel-xml.js (node js/qmodel-xml.js check <file>).
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            elementFormDefault="unqualified">
@@ -166,7 +166,7 @@
 
   <!-- ===== classes ===== -->
 
-  <!-- code: the enum body (type="enum") or the initializer ("= ..."), as in QM (PROPOSED 2026-11-20) -->
+  <!-- code: the enum body (type="enum") or the initializer ("= ..."), as in QM -->
   <xs:complexType name="Attribute">
     <xs:sequence>
       <xs:group ref="DocTrace"/>

@@ -1,15 +1,16 @@
 /*
- * ops.js - editor gestures as minimal line edits on the model text.
- * Spike, 2026-11-19. Plain JavaScript, no dependencies.
+ * ops.js - editing operations as minimal line edits on the model text.
+ * Part of the AI Statechart demo (MIT License, see LICENSE).
+ * Plain JavaScript, no dependencies.
  *
- * Every gesture takes the CURRENT text (never a cached model), parses it,
+ * Every operation takes the CURRENT text (never a cached model), parses it,
  * and returns an array of line edits. In VS Code the array becomes ONE
- * WorkspaceEdit, so VS Code's single undo stack gets one entry per gesture.
+ * WorkspaceEdit, so VS Code's single undo stack gets one entry per operation.
  *
  *   edit = { line, del, ins }   at 1-based `line`, delete `del` lines,
  *                               insert the lines `ins` (edits never overlap)
  *
- * Gestures rewrite only the elements they change, in canonical form;
+ * Operations rewrite only the elements they change, in canonical form;
  * everything else, including hand-formatted text, is left byte for byte.
  */
 'use strict';
@@ -77,7 +78,7 @@ const firstLine = (n, lines) => (n.line > 1 && lines[n.line - 2] === '' &&
                                  ['state', 'attribute', 'operation'].includes(n.tag)
                                  ? n.line - 1 : n.line);
 
-// ------------------------------------------------------------ gestures --
+// ---------------------------------------------------------- operations --
 
 /** F2 on a state: rename it and every reference to it. */
 function renameState(text, cls, oldName, newName) {
@@ -142,6 +143,132 @@ function deleteTran(text, cls, stateName, trig, nth = 0) {
     return [{ line: t.line, del: t.endLine - t.line + 1, ins: [] }];
 }
 
+// Edits that delete the children `gone` of `parent`; when nothing would be
+// left, the parent becomes a self-closing element instead.
+function deleteChildren(parent, gone) {
+    if (gone.length && parent.children.every((c) => gone.includes(c))) {
+        const e = retag(parent, parent.attrs, true);
+        return [{ line: parent.line, del: parent.endLine - parent.line + 1, ins: e.ins }];
+    }
+    return gone.map((c) => ({ line: c.line, del: c.endLine - c.line + 1, ins: [] }));
+}
+
+/** Delete the entry or exit action (kind) of a state. */
+function deleteBlock(text, cls, stateName, kind) {
+    const L = locate(text, cls);
+    const s = L.state(stateName);
+    const b = kids(s, kind)[0];
+    if (!b) throw new Error(stateName + ' has no ' + kind + ' action');
+    return deleteChildren(s, [b]);
+}
+
+/** Move the nth transition of a state up (-1) or down (+1) among its transitions. */
+function moveTran(text, cls, stateName, nth, dir) {
+    const L = locate(text, cls);
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    const ts = kids(L.state(stateName), 'tran');
+    const i = nth, j = i + dir;
+    if (!ts[i]) throw new Error('no transition ' + nth + ' in ' + stateName);
+    if (j < 0 || j >= ts.length) throw new Error('no transition to swap with');
+    const [a, b] = dir < 0 ? [ts[j], ts[i]] : [ts[i], ts[j]];
+    const A = lines.slice(a.line - 1, a.endLine);
+    const gap = lines.slice(a.endLine, b.line - 1);
+    const B = lines.slice(b.line - 1, b.endLine);
+    return [{ line: a.line, del: b.endLine - a.line + 1, ins: B.concat(gap, A) }];
+}
+
+// the states of the machine that holds state s, with helpers for the tree
+function stateTree(L, s) {
+    const machine = L.machines.find((m) => kids(m, 'state').includes(s));
+    const states = kids(machine, 'state');
+    const sup = (x) => states.find((y) => attr(y, 'name') === attr(x, 'super'));
+    const inSubtree = (x, root) => {
+        for (let a = x, n = 0; a && n <= states.length; a = sup(a), ++n) if (a === root) return true;
+        return false;
+    };
+    const subtree = (root) => states.filter((x) => inSubtree(x, root));
+    return { machine, states, sup, inSubtree, subtree };
+}
+// first and last line of a subtree (with the leading blank line); it must be contiguous
+function subtreeBlock(sub, lines, name) {
+    const ok = sub.every((x, i) => i === 0 || firstLine(x, lines) === sub[i - 1].endLine + 1);
+    if (!ok) throw new Error('the substates of ' + name + ' are not together in the file; restore tree order first');
+    return { start: firstLine(sub[0], lines), end: sub[sub.length - 1].endLine };
+}
+
+/**
+ * Move a state (with its substates) up (-1) or down (+1) among its siblings,
+ * i.e. the states with the same superstate. Only the order of the lines changes.
+ */
+function moveState(text, cls, stateName, dir) {
+    const L = locate(text, cls);
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    const s = L.state(stateName);
+    const T = stateTree(L, s);
+    const sib = T.states.filter((x) => attr(x, 'super') === attr(s, 'super'));
+    const i = sib.indexOf(s), j = i + dir;
+    if (j < 0 || j >= sib.length) throw new Error(stateName + ' has no ' + (dir < 0 ? 'previous' : 'next') + ' sibling');
+    const [a, b] = dir < 0 ? [sib[j], s] : [s, sib[j]];
+    const A = subtreeBlock(T.subtree(a), lines, attr(a, 'name'));
+    const B = subtreeBlock(T.subtree(b), lines, attr(b, 'name'));
+    if (B.start !== A.end + 1) throw new Error('the states are not in tree order in the file');
+    const la = lines.slice(A.start - 1, A.end), lb = lines.slice(B.start - 1, B.end);
+    // the blank line stays at the top of the pair, whichever block had it
+    const blankA = la[0] === '', blankB = lb[0] === '';
+    if (blankA !== blankB) {
+        if (blankA) { la.shift(); lb.unshift(''); } else { lb.shift(); la.unshift(''); }
+    }
+    return [{ line: A.start, del: B.end - A.start + 1, ins: lb.concat(la) }];
+}
+
+/**
+ * Delete a state with all its substates. Transitions and choice segments
+ * elsewhere that went into the deleted states become internal (their ends
+ * dangle). An initial transition of a superstate that went there is deleted,
+ * and with it the superstate's history (whose default target it gave);
+ * transitions via that history become plain. All of it is one edit list.
+ */
+function deleteState(text, cls, stateName) {
+    const L = locate(text, cls);
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    const s = L.state(stateName);
+    const T = stateTree(L, s);
+    const sub = T.subtree(s);
+    const names = new Set(sub.map((x) => attr(x, 'name')));
+    const blk = subtreeBlock(sub, lines, stateName);
+    const inside = (n) => n.line >= blk.start && n.line <= blk.end;
+    const all = targetCarriers({ machines: [T.machine] });
+    const parent = withParents(T.machine);
+    const gone = new Map();               // state outside -> its children to delete
+    const drop = (p, c) => { if (!gone.has(p)) gone.set(p, []); if (!gone.get(p).includes(c)) gone.get(p).push(c); };
+    const unvia = new Set();              // states whose history goes away
+    for (const c of all) {
+        if (inside(c) || !names.has(attr(c, 'target'))) continue;
+        const p = parent.get(c);
+        if (c.tag === 'initial' && p.tag === 'statechart') {
+            throw new Error('the initial transition of the state machine goes to ' + attr(c, 'target') +
+                            '; retarget it first');
+        }
+        if (c.tag === 'initial' || c.tag === 'history') {
+            drop(p, c);
+            const h = kids(p, 'history')[0];
+            if (h) { drop(p, h); unvia.add(attr(p, 'name')); }
+        }
+    }
+    const edits = [{ line: blk.start, del: blk.end - blk.start + 1, ins: [] }];
+    for (const [p, cs] of gone) edits.push(...deleteChildren(p, cs));
+    for (const c of all) {
+        if (inside(c) || c.tag === 'initial' || c.tag === 'history') continue;
+        const t = attr(c, 'target');
+        if (names.has(t)) {
+            edits.push(retag(c, setAttr(setAttr(c.attrs, 'target', undefined), 'via', undefined)));
+        } else if (unvia.has(t) && attr(c, 'via') === 'history') {
+            edits.push(retag(c, setAttr(c.attrs, 'via', undefined)));
+        }
+    }
+    return edits;
+}
+
 /** Double-click a row, edit the code in a tab: replace one block's content. */
 function setBlock(text, cls, stateName, kind, contentLines) {
     const L = locate(text, cls);
@@ -195,7 +322,7 @@ function reparent(text, cls, stateName, newSuper) {
 }
 
 /**
- * Shift+Tab on a state (decision 2026-11-19, option 1): the state (with its
+ * Shift+Tab on a state the state (with its
  * subtree) becomes a sibling of its superstate, placed right after the
  * superstate's subtree. Its former later siblings stay where they are.
  */
@@ -263,7 +390,7 @@ function setAttribute(text, line, name, value) {
 
 // ------------------------------------------------- choice segments (QM model) --
 //
-// QM's drawing order, which these gestures follow (user, 2026-11-19):
+// QM's drawing order, which these operations follow:
 //  1. a new transition is attached to its state and is internal (dangling end);
 //  2. a choice segment attaches to a dangling end; its guard is typed for it;
 //     its own end goes to a state (target) or stays dangling (internal);
@@ -367,7 +494,7 @@ function setGuard(text, line, guard) {
 
 // ------------------------------------------------------------- history --
 //
-// History (user, 2026-11-20): a composite state declares at most one
+// History: a composite state declares at most one
 // <history> (shallow or deep); a transition enters it with via="history".
 // In the diagram a transition is connected to the history by dropping its
 // arrowhead (or dangling end) on the state's history ROW; dropping on the
@@ -440,6 +567,7 @@ const linesTouched = (edits) => edits.reduce((n, e) => n + Math.max(e.del, e.ins
 
 const api = { renameState, setTarget, addTran, deleteTran, setBlock, reparent, outdent,
               setAttribute, addBranch, deleteBranch, moveBranch, setGuard, setHistory, connect,
+              deleteBlock, moveTran, moveState, deleteState,
               apply, linesTouched };
 if (typeof module !== 'undefined') module.exports = api;
 if (typeof window !== 'undefined') window.qmodelOps = api;

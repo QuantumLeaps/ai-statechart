@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model format="qmodel-1" framework="qpc">
+    <doc><![CDATA[
+Toaster oven for the LSN preprint, Fig. 3 (right panel).
+Same state machine as Claude\paper\toaster.qm (QM 7.0.4), which is drawn in Fig. 1.
+    ]]></doc>
+
+<package name="SMs">
+
+<class name="ToastOven" super="QHsm">
+    <doc><![CDATA[
+Oven state machine
+    ]]></doc>
+
+<statechart>
+    <initial target="doorClosed">
+    <action><![CDATA[
+(void)par; // unused parameter
+    ]]></action>
+    </initial>
+
+<state name="doorClosed">
+    <entry><![CDATA[
+PRINTF_S("%s;", "door-Closed");
+    ]]></entry>
+    <exit><![CDATA[
+    ]]></exit>
+    <initial target="off"/>
+    <history type="shallow" target="off"/>
+    <tran trig="OPEN" target="doorOpen"/>
+    <tran trig="TOAST" target="toasting"/>
+    <tran trig="BAKE" target="baking"/>
+    <tran trig="OFF" target="off"/>
+</state>
+
+<state name="heating" super="doorClosed">
+    <entry><![CDATA[
+PRINTF_S("%s;", "heater-On");
+    ]]></entry>
+    <exit><![CDATA[
+PRINTF_S("%s;", "heater-Off");
+    ]]></exit>
+    <initial target="toasting">
+    <action><![CDATA[
+PRINTF_S("%s;", "heating-init");
+    ]]></action>
+    </initial>
+</state>
+
+<state name="toasting" super="heating">
+    <entry><![CDATA[
+PRINTF_S("%s;", "toasting");
+    ]]></entry>
+</state>
+
+<state name="baking" super="heating">
+    <entry><![CDATA[
+PRINTF_S("%s;", "baking");
+    ]]></entry>
+</state>
+
+<state name="off" super="doorClosed">
+    <entry><![CDATA[
+PRINTF_S("%s;", "toaster-Off");
+    ]]></entry>
+</state>
+
+<state name="doorOpen">
+    <entry><![CDATA[
+PRINTF_S("%s;", "door-Open,lamp-On");
+    ]]></entry>
+    <exit><![CDATA[
+PRINTF_S("%s;", "lamp-Off");
+    ]]></exit>
+    <tran trig="CLOSE" target="doorClosed" via="history"/>
+</state>
+</statechart>
+</class>
+</package>
+
+</model>

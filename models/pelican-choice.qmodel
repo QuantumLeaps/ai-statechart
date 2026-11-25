@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model format="qmodel-1" framework="qpc">
+
+<package name="AOs">
+    <doc><![CDATA[
+Active objects of the PELICAN crossing example
+(PEdestrian LIght CONtrolled crossing).
+    ]]></doc>
+
+<class name="Pelican" super="QActive">
+    <doc><![CDATA[
+PELICAN crossing controller. Cars get green by default;
+a pedestrian request ends the green period after its minimum
+duration, then pedestrians get WALK, then a flashing DON'T WALK.
+    ]]></doc>
+    <trace ref="REQ-PEL-001"/>
+
+    <attribute name="timeout" type="QTimeEvt" visibility="private"/>
+
+    <attribute name="flashCtr" type="uint8_t" visibility="private"/>
+
+    <attribute name="CARS_GREEN_MIN_TOUT" type="uint16_t" visibility="public" modifiers="static const">
+    <doc><![CDATA[
+Minimum green time for cars [ticks].
+    ]]></doc>
+    </attribute>
+
+<operation name="ctor" type="void" visibility="public">
+    <code><![CDATA[
+QActive_ctor(&me->super, Q_STATE_CAST(&Pelican_initial));
+QTimeEvt_ctorX(&me->timeout, &me->super, TIMEOUT_SIG, 0U);
+    ]]></code>
+</operation>
+
+<operation name="isFlashOn" type="bool" visibility="private" modifiers="const">
+    <code><![CDATA[
+return (me->flashCtr & 1U) == 0U;
+    ]]></code>
+</operation>
+
+<statechart>
+    <initial target="carsEnabled"/>
+
+<state name="carsEnabled">
+</state>
+
+<state name="pedsFlash">
+    <entry><![CDATA[
+// arm flash timer
+BSP_showState("pedsFlash");
+QTimeEvt_armX(&me->timeout, PEDS_FLASH_TOUT, PEDS_FLASH_TOUT);
+me->flashCtr = (PEDS_FLASH_NUM * 2U) + 1U;
+    ]]></entry>
+    <exit><![CDATA[
+// disarm
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT">
+    <choice>
+    <guard><![CDATA[
+// more
+me->flashCtr != 0U
+    ]]></guard>
+    <action><![CDATA[
+// count
+--me->flashCtr;
+    ]]></action>
+    <choice>
+    <guard><![CDATA[
+// on
+Pelican_isFlashOn(me)
+    ]]></guard>
+    <action><![CDATA[
+// don't walk
+BSP_signalPeds(PEDS_DONT_WALK);
+    ]]></action>
+    </choice>
+    <else>
+    <action><![CDATA[
+// blank
+BSP_signalPeds(PEDS_BLANK);
+    ]]></action>
+    </else>
+    </choice>
+    <else target="carsEnabled"/>
+    </tran>
+</state>
+</statechart>
+</class>
+</package>
+</model>

@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model format="qmodel-1" framework="qpc">
+
+<package name="AOs">
+    <doc><![CDATA[
+Active objects of the PELICAN crossing example
+(PEdestrian LIght CONtrolled crossing).
+    ]]></doc>
+
+<class name="Pelican" super="QActive">
+    <doc><![CDATA[
+PELICAN crossing controller. Cars get green by default;
+a pedestrian request ends the green period after its minimum
+duration, then pedestrians get WALK, then a flashing DON'T WALK.
+    ]]></doc>
+    <trace ref="REQ-PEL-001"/>
+
+    <attribute name="timeout" type="QTimeEvt" visibility="private"/>
+
+    <attribute name="flashCtr" type="uint8_t" visibility="private"/>
+
+    <attribute name="CARS_GREEN_MIN_TOUT" type="uint16_t" visibility="public" modifiers="static const">
+    <doc><![CDATA[
+Minimum green time for cars [ticks].
+    ]]></doc>
+    </attribute>
+
+<operation name="ctor" type="void" visibility="public">
+    <code><![CDATA[
+QActive_ctor(&me->super, Q_STATE_CAST(&Pelican_initial));
+QTimeEvt_ctorX(&me->timeout, &me->super, TIMEOUT_SIG, 0U);
+    ]]></code>
+</operation>
+
+<operation name="isFlashOn" type="bool" visibility="private" modifiers="const">
+    <code><![CDATA[
+return (me->flashCtr & 1U) == 0U;
+    ]]></code>
+</operation>
+
+<statechart>
+    <initial target="operational">
+    <action><![CDATA[
+QActive_subscribe(&me->super, PEDS_WAITING_SIG);
+    ]]></action>
+    </initial>
+
+<state name="operational">
+    <entry><![CDATA[
+BSP_signalCars(CARS_RED);
+BSP_signalPeds(PEDS_DONT_WALK);
+    ]]></entry>
+    <initial target="carsEnabled"/>
+    <history type="deep" target="carsEnabled"/>
+    <tran trig="OFF" target="offline"/>
+</state>
+
+<state name="carsEnabled" super="operational">
+    <exit><![CDATA[
+BSP_signalCars(CARS_RED);
+    ]]></exit>
+    <initial target="carsGreen"/>
+</state>
+
+<state name="carsGreen" super="carsEnabled">
+    <entry><![CDATA[
+BSP_signalCars(CARS_GREEN);
+QTimeEvt_armX(&me->timeout, CARS_GREEN_MIN_TOUT, 0U);
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <initial target="carsGreenNoPed"/>
+</state>
+
+<state name="carsGreenNoPed" super="carsGreen">
+    <trace ref="REQ-PEL-004"/>
+    <entry><![CDATA[
+BSP_showState("carsGreenNoPed");
+    ]]></entry>
+    <tran trig="PEDS_WAITING" target="carsGreenPedWait"/>
+    <tran trig="TIMEOUT" target="carsGreenInt"/>
+</state>
+
+<state name="carsGreenInt" super="carsGreen">
+    <entry><![CDATA[
+BSP_showState("carsGreenInt");
+    ]]></entry>
+    <tran trig="PEDS_WAITING" target="carsYellow"/>
+</state>
+
+<state name="carsGreenPedWait" super="carsGreen">
+    <entry><![CDATA[
+BSP_showState("carsGreenPedWait");
+    ]]></entry>
+    <tran trig="TIMEOUT" target="carsYellow"/>
+</state>
+
+<state name="carsYellow" super="carsEnabled">
+    <entry><![CDATA[
+BSP_showState("carsYellow");
+BSP_signalCars(CARS_YELLOW);
+QTimeEvt_armX(&me->timeout, CARS_YELLOW_TOUT, 0U);
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT" target="pedsEnabled"/>
+</state>
+
+<state name="pedsEnabled" super="operational">
+    <exit><![CDATA[
+BSP_signalPeds(PEDS_DONT_WALK);
+    ]]></exit>
+    <initial target="pedsWalk"/>
+</state>
+
+<state name="pedsWalk" super="pedsEnabled">
+    <entry><![CDATA[
+BSP_showState("pedsWalk");
+BSP_signalPeds(PEDS_WALK);
+QTimeEvt_armX(&me->timeout, PEDS_WALK_TOUT, 0U);
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT" target="pedsFlash"/>
+</state>
+
+<state name="pedsFlash" super="pedsEnabled">
+    <entry><![CDATA[
+BSP_showState("pedsFlash");
+QTimeEvt_armX(&me->timeout, PEDS_FLASH_TOUT, PEDS_FLASH_TOUT);
+me->flashCtr = (PEDS_FLASH_NUM * 2U) + 1U;
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT">
+    <choice>
+    <guard><![CDATA[
+me->flashCtr != 0U
+    ]]></guard>
+    <action><![CDATA[
+--me->flashCtr;
+    ]]></action>
+    <choice>
+    <guard><![CDATA[
+Pelican_isFlashOn(me)
+    ]]></guard>
+    <action><![CDATA[
+BSP_signalPeds(PEDS_DONT_WALK);
+    ]]></action>
+    </choice>
+    <else>
+    <action><![CDATA[
+BSP_signalPeds(PEDS_BLANK);
+    ]]></action>
+    </else>
+    </choice>
+    <else target="carsEnabled"/>
+    </tran>
+</state>
+
+<state name="offline">
+    <entry><![CDATA[
+BSP_showState("offline");
+QTimeEvt_armX(&me->timeout, OFF_FLASH_TOUT, OFF_FLASH_TOUT);
+me->flashCtr = 0U;
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT">
+    <action><![CDATA[
+me->flashCtr ^= 1U;
+if ((me->flashCtr & 1U) == 0U) {
+    BSP_signalCars(CARS_RED);
+    BSP_signalPeds(PEDS_DONT_WALK);
+}
+else {
+    BSP_signalCars(CARS_BLANK);
+    BSP_signalPeds(PEDS_BLANK);
+}
+    ]]></action>
+    </tran>
+    <tran trig="ON" target="operational" via="history"/>
+</state>
+</statechart>
+</class>
+</package>
+
+<file path="src/pelican.c">
+    <text><![CDATA[
+#include "qpc.h"
+#include "bsp.h"
+#include "pelican.h"
+
+Q_DEFINE_THIS_FILE
+
+$define${AOs::Pelican}
+    ]]></text>
+</file>
+
+<file path="src/pelican.h">
+    <text><![CDATA[
+#ifndef PELICAN_H_
+#define PELICAN_H_
+
+$declare${AOs::Pelican}
+
+#endif /* PELICAN_H_ */
+    ]]></text>
+</file>
+
+</model>

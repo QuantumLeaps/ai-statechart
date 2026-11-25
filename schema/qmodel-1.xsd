@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  QModel file format, version 1 (qmodel-1). Structural schema.
+  Draft 0.5, 2026-11-19. Companion to QModel-XML-format-draft.md.
+
+  The schema checks structure, element order and attribute values only.
+  Name resolution, hierarchy, targets, whitespace and canonical form are
+  checked by `qmodel check` (see the draft, sections 6 and 7).
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="unqualified">
+
+  <!-- ===== simple types ===== -->
+
+  <xs:simpleType name="Name">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Za-z_][A-Za-z0-9_]*"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- one signal, or a comma-separated list (QM notation), or CATCH_ALL -->
+  <xs:simpleType name="Trigger">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Za-z_][A-Za-z0-9_]*( *, *[A-Za-z_][A-Za-z0-9_]*)*"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Framework">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="qpc"/>
+      <xs:enumeration value="qpcpp"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Visibility">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="public"/>
+      <xs:enumeration value="protected"/>
+      <xs:enumeration value="private"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- space-separated, canonical order: static virtual inline const -->
+  <xs:simpleType name="Modifiers">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="(static|virtual|inline|const)( (static|virtual|inline|const))*"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="Type">
+    <xs:restriction base="xs:string">
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- via="history": enter the target state through its history (the one
+       <history> it declares) -->
+  <xs:simpleType name="Via">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="history"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="HistoryKind">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="shallow"/>
+      <xs:enumeration value="deep"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- ===== user material: one CDATA section, verbatim ===== -->
+
+  <xs:simpleType name="Block">
+    <xs:restriction base="xs:string"/>
+  </xs:simpleType>
+
+  <!-- ===== shared pieces ===== -->
+
+  <xs:complexType name="Trace">
+    <xs:attribute name="ref" type="xs:token" use="required"/>
+  </xs:complexType>
+
+  <xs:group name="DocTrace">
+    <xs:sequence>
+      <xs:element name="doc" type="Block" minOccurs="0"/>
+      <xs:element name="trace" type="Trace" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:group>
+
+  <!-- target: by state name -->
+  <xs:attributeGroup name="Target">
+    <xs:attribute name="target" type="Name"/>
+    <xs:attribute name="via" type="Via"/>
+  </xs:attributeGroup>
+
+  <!-- a choice point: guarded branches in evaluation order, then else -->
+  <xs:group name="Branches">
+    <xs:sequence>
+      <xs:element name="choice" type="Choice" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="else" type="Else" minOccurs="0"/>
+    </xs:sequence>
+  </xs:group>
+
+  <xs:complexType name="Choice">
+    <xs:sequence>
+      <xs:element name="guard" type="Block"/>
+      <xs:element name="action" type="Block" minOccurs="0"/>
+      <xs:group ref="Branches"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="Target"/>
+  </xs:complexType>
+
+  <xs:complexType name="Else">
+    <xs:sequence>
+      <xs:element name="action" type="Block" minOccurs="0"/>
+      <xs:group ref="Branches"/>
+    </xs:sequence>
+    <xs:attributeGroup ref="Target"/>
+  </xs:complexType>
+
+  <xs:complexType name="Initial">
+    <xs:sequence>
+      <xs:element name="action" type="Block" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="target" type="Name" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="History">
+    <xs:sequence>
+      <xs:element name="action" type="Block" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="type" type="HistoryKind" use="required"/>
+    <xs:attribute name="target" type="Name" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="Tran">
+    <xs:sequence>
+      <xs:group ref="DocTrace"/>
+      <xs:element name="action" type="Block" minOccurs="0"/>
+      <xs:group ref="Branches"/>
+    </xs:sequence>
+    <xs:attribute name="trig" type="Trigger" use="required"/>
+    <xs:attributeGroup ref="Target"/>
+  </xs:complexType>
+
+  <xs:complexType name="State">
+    <xs:sequence>
+      <xs:group ref="DocTrace"/>
+      <xs:element name="entry" type="Block" minOccurs="0"/>
+      <xs:element name="exit" type="Block" minOccurs="0"/>
+      <xs:element name="initial" type="Initial" minOccurs="0"/>
+      <xs:element name="history" type="History" minOccurs="0"/>
+      <xs:element name="tran" type="Tran" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="Name" use="required"/>
+    <xs:attribute name="super" type="Name"/>
+  </xs:complexType>
+
+  <xs:complexType name="Statechart">
+    <xs:sequence>
+      <xs:element name="doc" type="Block" minOccurs="0"/>
+      <xs:element name="initial" type="Initial"/>
+      <xs:element name="state" type="State" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- ===== classes ===== -->
+
+  <!-- code: the enum body (type="enum") or the initializer ("= ..."), as in QM (PROPOSED 2026-11-20) -->
+  <xs:complexType name="Attribute">
+    <xs:sequence>
+      <xs:group ref="DocTrace"/>
+      <xs:element name="code" type="Block" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="Name" use="required"/>
+    <xs:attribute name="type" type="Type" use="required"/>
+    <xs:attribute name="visibility" type="Visibility" use="required"/>
+    <xs:attribute name="modifiers" type="Modifiers"/>
+  </xs:complexType>
+
+  <xs:complexType name="Param">
+    <xs:attribute name="name" type="Name" use="required"/>
+    <xs:attribute name="type" type="Type" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="Operation">
+    <xs:sequence>
+      <xs:group ref="DocTrace"/>
+      <xs:element name="param" type="Param" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="code" type="Block" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="Name" use="required"/>
+    <xs:attribute name="type" type="Type" use="required"/>
+    <xs:attribute name="visibility" type="Visibility" use="required"/>
+    <xs:attribute name="modifiers" type="Modifiers"/>
+  </xs:complexType>
+
+  <xs:complexType name="Class">
+    <xs:sequence>
+      <xs:group ref="DocTrace"/>
+      <xs:element name="attribute" type="Attribute" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="operation" type="Operation" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="statechart" type="Statechart" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="name" type="Name" use="required"/>
+    <xs:attribute name="super" type="Name"/>
+  </xs:complexType>
+
+  <!-- ===== packages, files, model ===== -->
+
+  <xs:complexType name="Package">
+    <xs:sequence>
+      <xs:group ref="DocTrace"/>
+      <xs:element name="attribute" type="Attribute" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="operation" type="Operation" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:choice minOccurs="0" maxOccurs="unbounded">
+        <xs:element name="class" type="Class"/>
+        <xs:element name="package" type="Package"/>
+      </xs:choice>
+    </xs:sequence>
+    <xs:attribute name="name" type="Name" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="File">
+    <xs:sequence>
+      <xs:element name="doc" type="Block" minOccurs="0"/>
+      <xs:element name="text" type="Block"/>
+    </xs:sequence>
+    <xs:attribute name="path" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <xs:element name="model">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="doc" type="Block" minOccurs="0"/>
+        <xs:element name="package" type="Package" minOccurs="0" maxOccurs="unbounded"/>
+        <xs:element name="file" type="File" minOccurs="0" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="format" type="xs:string" fixed="qmodel-1" use="required"/>
+      <xs:attribute name="framework" type="Framework" use="required"/>
+    </xs:complexType>
+    <xs:unique name="uniqueFilePath">
+      <xs:selector xpath="file"/>
+      <xs:field xpath="@path"/>
+    </xs:unique>
+  </xs:element>
+
+</xs:schema>

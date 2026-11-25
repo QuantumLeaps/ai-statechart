@@ -1,0 +1,1986 @@
+<!DOCTYPE html>
+<!--
+  AI Statechart: interactive demonstration of the Linear Statechart Notation
+  Copyright (c) 2026 Quantum Leaps, LLC. MIT License (see LICENSE).
+  Paper: M. Samek, "State Machine Modeling for the AI Era: The Linear
+  Statechart Notation", 2026, https://doi.org/10.5281/zenodo.24519411
+  https://github.com/QuantumLeaps/ai-statechart
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>AI Statechart: Linear Statechart Notation (interactive demo)</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: "Segoe UI", Arial, sans-serif; font-size: 13px;
+               font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+  body { display: flex; flex-direction: column; }
+  #bar { padding: 5px 10px; color: #444; border-bottom: 1px solid #ddd; display: flex; gap: 10px;
+         align-items: center; flex-wrap: nowrap; white-space: nowrap; }
+  #bar button, #bar select { font: inherit; font-size: 12px; }
+  #levels button { min-width: 26px; padding: 1px 4px; }
+  #levels button.on { background: #1a73e8; color: #fff; border: 1px solid #1a73e8; border-radius: 3px; }
+  #bar .sep { width: 1px; height: 18px; background: #ddd; }
+  /* one line, never wraps: a status message must not move the diagram */
+  #status { color: #555; margin-left: auto; flex: 1 1 0; min-width: 0; overflow: hidden;
+            text-overflow: ellipsis; text-align: right; }
+  #status.err { color: #b00020; }
+  #prompt input { font: 12px Consolas, monospace; width: 240px; }
+  #main { flex: 1; display: flex; min-height: 0; }
+
+  /* ---- column 2: linear statechart ---- */
+  #center { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+  #banner { background: #fdecea; color: #8a1c1c; border-bottom: 1px solid #f5c2c0; padding: 6px 10px; }
+  #banner button { font: inherit; font-size: 12px; margin-left: 6px; }
+  #diagram { flex: 1; overflow: auto; outline: none; }
+  #diagram.stale svg { opacity: 0.4; filter: grayscale(0.6); }
+  svg { display: block; user-select: none; font-variant-ligatures: none; }
+  .sname    { font: 600 13px "Segoe UI", Arial, sans-serif; fill: #222; cursor: pointer; }
+  .sname.orphan { fill: #b00020; }
+  .sline    { stroke: #c62828; stroke-width: 3.5; }
+  .label    { font: 13px "Segoe UI", Arial, sans-serif; fill: #222; }
+  .trig     { font-weight: 600; }
+  .catchall { font-style: italic; }
+  .brief    { font-style: italic; }
+  .code     { fill: #777; }
+  .tline    { stroke: #4a78c8; stroke-width: 1.2; fill: none; }
+  .halo     { stroke: #fff; stroke-width: 7; fill: none; }
+  .tfill    { fill: #4a78c8; }
+  .hmark    { fill: #fff; stroke: #4a78c8; stroke-width: 1.2; }
+  .htext    { font: 600 8px "Segoe UI", Arial, sans-serif; fill: #4a78c8; text-anchor: middle; }
+  .bad      { fill: #b00020; font-weight: 700; }
+  .rowhit   { fill: transparent; }
+  .rowhit:hover { fill: rgba(0,0,0,0.04); }
+  .rowsel   { fill: rgba(26,115,232,0.10); }
+  .fold     { fill: #555; cursor: pointer; }
+  .diamond  { fill: #fff; stroke: #4a78c8; stroke-width: 1.2; pointer-events: none; }
+  .lanehit  { stroke: transparent; stroke-width: 9; }
+  .arrowhit { fill: transparent; cursor: grab; }
+  .label, .tline, .tfill, .sline, .halo, .hmark, .htext, text.tr { pointer-events: none; }
+  svg.focus .tr:not(.hot) { opacity: 0.15; }
+  svg.focus .sline:not(.src) { opacity: 0.35; }
+  svg.focus .ee:not(.lit) { opacity: 0.25; }
+  .sline.src { stroke: #8e0000; stroke-width: 5; }
+  .sname.src { fill: #8e0000; }
+  svg.focus .halo.tr:not(.hot) { opacity: 0; }
+  .tr.hot.tline, .tr.hot.diamond, .tr.hot.hmark { stroke: #0d47a1; stroke-width: 2.4; }
+  .tr.hot.tfill { fill: #0d47a1; }
+  text.tr.hot, .tr.hot.htext { fill: #0d47a1; }
+  .sname.sel { fill: #1a73e8; }
+  .sline.sel { stroke: #1a73e8; }
+  .tr.selt.tline, .tr.selt.diamond, .tr.selt.hmark { stroke: #1a73e8; stroke-width: 2.4; }
+  .tr.selt.tfill { fill: #1a73e8; }
+  text.tr.selt { fill: #1a73e8; }
+  .sline.drop { stroke: #2e7d32; stroke-width: 6; }
+  /* while dragging an arrowhead: history rows are drop targets (via="history") */
+  .hmark.droptarget { stroke: #2e7d32; stroke-width: 2; }
+  .hmark.drop { stroke: #2e7d32; stroke-width: 3.5; fill: #e8f5e9; }
+  .htext.droptarget { fill: #2e7d32; }
+  svg.focus .hrow.droptarget, svg.focus .hrow.drop { opacity: 1; }   /* drop targets are never dimmed */
+  /* structure rows (packages, classes, members, statecharts, files) */
+  .mname    { font: 600 13px "Segoe UI", Arial, sans-serif; fill: #333; cursor: pointer; }
+  .mname.sel, .mname.sel .mdetail { fill: #1a73e8; }
+  .mdetail  { font-weight: 400; fill: #888; }
+  .vline.mline { stroke: #c8c8c8; stroke-width: 1.2; }
+  .ic-package { fill: #c9a227; } .ic-class { fill: #2e7d32; } .ic-statechart { fill: #ef6c00; }
+  .ic-attribute { fill: #1565c0; } .ic-operation { fill: #6a1b9a; } .ic-file { fill: #9e9e9e; }
+  /* tree lines: each state's segment from its superstate down to its own row */
+  .vline    { stroke: #c62828; stroke-width: 1.6; fill: none; pointer-events: none; }
+  svg.focus .vline:not(.src) { opacity: 0.35; }
+  .vline.src { stroke: #8e0000; stroke-width: 3; }
+  .vline.sel { stroke: #1a73e8; }
+  /* code must look like code: no "->" arrow ligatures (the font shorthands above reset this) */
+  svg text, svg tspan, #xml { font-variant-ligatures: none !important;
+                                     font-feature-settings: "liga" 0, "calt" 0 !important; }
+  .dragline { stroke: #2e7d32; stroke-width: 2; stroke-dasharray: 4 3; }
+
+  /* ---- column 3: the XML document (the model) ---- */
+  #xmlpane { width: 42%; flex: none; display: flex; border-left: 1px solid #ddd; background: #fff; min-width: 0; }
+  #xmlpane[hidden] { display: none; }
+  #gutter, #hl, #xml { font: 12px/18px Consolas, "Cascadia Mono", monospace; }
+  #gutter { width: 3.6em; flex: none; overflow: hidden; color: #aaa; text-align: right; background: #fafafa;
+            border-right: 1px solid #eee; padding: 4px 6px 4px 0; white-space: pre; }
+  #editor { flex: 1; position: relative; overflow: hidden; }
+  #hl { position: absolute; left: 0; top: 0; right: 0; padding: 4px 0; pointer-events: none; }
+  #hl div { height: 18px; }
+  #hl div.sel { background: #e3edfd; }
+  #hl div.hov { background: #f3f3f3; }
+  #hl div.flash { background: #fff1a8; transition: background 1.2s; }
+  #hl div.err { box-shadow: inset 3px 0 0 #b00020; }
+  #xml { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; margin: 0;
+         border: 0; outline: none; resize: none; padding: 4px 6px; background: transparent;
+         white-space: pre; overflow: auto; tab-size: 4; color: #222; }
+
+  /* ---- problems and help ---- */
+  #problems { border-top: 1px solid #ddd; max-height: 96px; overflow: auto; padding: 3px 10px; background: #fcfcfc; }
+  #problems .p { cursor: pointer; white-space: nowrap; }
+  #problems .p:hover { background: #eef2f7; }
+  #problems .error { color: #b00020; }
+  #problems .warning { color: #9a6700; }
+  #help { border-top: 1px solid #eee; padding: 3px 10px; color: #777; font-size: 12px; }
+  kbd { font: 11px Consolas, monospace; border: 1px solid #ccc; border-radius: 3px; padding: 0 3px; background: #f7f7f7; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <b>Linear Statechart Notation</b> <a href="https://doi.org/10.5281/zenodo.24519411" target="_blank" title="The paper">(paper)</a>
+  <select id="modelSel">
+    <option value="toaster">toaster.qmodel (toaster oven)</option>
+    <option value="pelican">pelican.qmodel (PELICAN crossing)</option>
+    <option value="qhsmtst">qhsmtst.qmodel (test model)</option>
+    <option value="file">Open file...</option>
+  </select>
+  <input type="file" id="fileIn" accept=".qmodel,.xml" hidden>
+  <button id="download" title="Save the current text as a .qmodel file">Download</button>
+  <span class="sep"></span>
+  <button id="undoBtn">Undo</button><button id="redoBtn">Redo</button>
+  <span class="sep"></span>
+  <label><input type="checkbox" id="showActions"> Actions</label>
+  <label title="Vertical lines connecting the states of one level"><input type="checkbox" id="showTree" checked> Tree lines</label>
+  <span id="levels" title="Show the statecharts down to this outline level (keys 1-9; 0 = all). Packages and classes are not affected."></span>
+  <span class="sep"></span>
+  <label><input type="checkbox" id="showXml"> Show XML</label>
+  <span id="prompt" hidden><span id="pLabel"></span> <input id="pInput"></span>
+  <span id="status"></span>
+</div>
+<div id="main">
+  <div id="center">
+    <div id="banner" hidden></div>
+    <div id="diagram" tabindex="0"><svg id="svg"></svg></div>
+  </div>
+  <div id="xmlpane" hidden>
+    <div id="gutter"></div>
+    <div id="editor"><div id="hl"></div><textarea id="xml" spellcheck="false" wrap="off"></textarea></div>
+  </div>
+</div>
+<div id="problems"></div>
+<div id="help">
+  One view for the whole model: packages, classes, members, statecharts, files. Select here or in the XML: the other follows.
+  <kbd>F2</kbd> rename &nbsp; <kbd>Tab</kbd>/<kbd>Shift+Tab</kbd> indent/outdent state &nbsp;
+  <kbd>t</kbd> new transition &nbsp; <kbd>Shift+H</kbd> history of a state (none/shallow/deep) &nbsp;
+  <kbd>h</kbd> enter the target through its history, or not &nbsp; drop an arrowhead on a history row (H/H*): via history &nbsp; <kbd>c</kbd> choice segment on a dangling end (guard, or "else") &nbsp;
+  <kbd>F2</kbd> on a segment: edit guard &nbsp; <kbd>Ctrl+Up</kbd>/<kbd>Ctrl+Down</kbd> reorder segments &nbsp;
+  <kbd>Del</kbd> delete transition or segment &nbsp;
+  drag an arrowhead to another state line (drop anywhere else, or <kbd>i</kbd>: internal) &nbsp; drag a dangling end's square onto a state line &nbsp;
+  <kbd>Up</kbd>/<kbd>Down</kbd> move between rows &nbsp; a leading comment <code>// text</code> in an action or guard is its brief on the diagram &nbsp;
+  <kbd>Ctrl+Z</kbd>/<kbd>Ctrl+Y</kbd> undo/redo (one stack for gestures and typing) &nbsp;
+  click a triangle or diamond to fold &nbsp; <kbd>1</kbd>...<kbd>9</kbd> show down to that level, <kbd>0</kbd> all levels
+</div>
+
+<script type="text/plain" id="ex-toaster"><?xml version="1.0" encoding="UTF-8"?>
+<model format="qmodel-1" framework="qpc">
+    <doc><![CDATA[
+Demonstration of transitions to shallow history and deep history
+in QHsm-style state machines (toaster oven).
+Converted by hand from qpc\examples\posix-win32\history_qhsm\history.qm.
+    ]]></doc>
+
+<package name="App">
+
+    <attribute name="AppSignals" type="enum" visibility="public">
+    <code><![CDATA[
+{
+    OPEN_SIG = Q_USER_SIG,
+    CLOSE_SIG,
+    TOAST_SIG,
+    BAKE_SIG,
+    OFF_SIG,
+    TERMINATE_SIG // terminate the application
+};
+    ]]></code>
+    </attribute>
+
+    <attribute name="SM_ToastOven" type="QAsm * const" visibility="public">
+    <code><![CDATA[
+= (QAsm *)&ToastOven_inst;
+    ]]></code>
+    </attribute>
+
+<operation name="ToastOven_ctor" type="void" visibility="public">
+    <code><![CDATA[
+ToastOven *me = &ToastOven_inst;
+QHsm_ctor(&me->super, Q_STATE_CAST(&ToastOven_initial));
+    ]]></code>
+</operation>
+</package>
+
+<package name="SMs">
+
+<class name="ToastOven" super="QHsm">
+    <doc><![CDATA[
+Oven state machine
+    ]]></doc>
+
+    <attribute name="inst" type="ToastOven" visibility="public" modifiers="static"/>
+
+<statechart>
+    <initial target="doorClosed">
+    <action><![CDATA[
+(void)par; // unused parameter
+    ]]></action>
+    </initial>
+
+<state name="doorClosed">
+    <entry><![CDATA[
+PRINTF_S("%s;", "door-Closed");
+    ]]></entry>
+    <initial target="off"/>
+    <history type="shallow" target="off"/>
+    <tran trig="TERMINATE" target="final"/>
+    <tran trig="OPEN" target="doorOpen"/>
+    <tran trig="TOAST" target="toasting"/>
+    <tran trig="BAKE" target="baking"/>
+    <tran trig="OFF" target="off"/>
+</state>
+
+<state name="heating" super="doorClosed">
+    <entry><![CDATA[
+PRINTF_S("%s;", "heater-On");
+    ]]></entry>
+    <exit><![CDATA[
+PRINTF_S("%s;", "heater-Off");
+    ]]></exit>
+    <initial target="toasting">
+    <action><![CDATA[
+PRINTF_S("%s;", "heating-init");
+    ]]></action>
+    </initial>
+    <history type="deep" target="baking"/>
+</state>
+
+<state name="toasting" super="heating">
+    <entry><![CDATA[
+PRINTF_S("%s;", "toasting");
+    ]]></entry>
+</state>
+
+<state name="baking" super="heating">
+    <entry><![CDATA[
+PRINTF_S("%s;", "baking");
+    ]]></entry>
+</state>
+
+<state name="off" super="doorClosed">
+    <entry><![CDATA[
+PRINTF_S("%s;", "toaster-Off");
+    ]]></entry>
+</state>
+
+<state name="doorOpen">
+    <entry><![CDATA[
+PRINTF_S("%s;", "door-Open,lamp-On");
+    ]]></entry>
+    <exit><![CDATA[
+PRINTF_S("%s;", "lamp-Off");
+    ]]></exit>
+    <tran trig="CLOSE" target="doorClosed" via="history"/>
+    <tran trig="TERMINATE" target="final"/>
+    <tran trig="OFF" target="heating" via="history"/>
+</state>
+
+<state name="final">
+    <entry><![CDATA[
+QF_onCleanup();
+exit(0);
+    ]]></entry>
+</state>
+</statechart>
+</class>
+</package>
+
+<file path="app.h">
+    <text><![CDATA[
+#ifndef APP_H_
+#define APP_H_
+
+$declare ${App}
+
+#endif // APP_H_
+    ]]></text>
+</file>
+
+<file path="bsp.h">
+    <text><![CDATA[
+#ifndef BSP_H_
+#define BSP_H_
+
+#define BSP_TICKS_PER_SEC    100U
+
+void BSP_init(void const * const arg);
+void BSP_showMsg(char const * const msg);
+
+#endif // BSP_H_
+    ]]></text>
+</file>
+
+<file path="history.c">
+    <text><![CDATA[
+#include "qpc.h"
+#include "bsp.h"
+#include "app.h"
+
+#include "safe_std.h" // portable "safe" <stdio.h>/<string.h> facilities
+#include <stdlib.h>   // for exit()
+
+//Q_DEFINE_THIS_FILE
+
+$declare ${SMs::ToastOven}
+
+$define ${App}
+$define ${SMs::ToastOven}
+    ]]></text>
+</file>
+
+</model>
+</script>
+<script type="text/plain" id="ex-pelican"><?xml version="1.0" encoding="UTF-8"?>
+<model format="qmodel-1" framework="qpc">
+
+<package name="AOs">
+    <doc><![CDATA[
+Active objects of the PELICAN crossing example
+(PEdestrian LIght CONtrolled crossing).
+    ]]></doc>
+
+<class name="Pelican" super="QActive">
+    <doc><![CDATA[
+PELICAN crossing controller. Cars get green by default;
+a pedestrian request ends the green period after its minimum
+duration, then pedestrians get WALK, then a flashing DON'T WALK.
+    ]]></doc>
+    <trace ref="REQ-PEL-001"/>
+
+    <attribute name="timeout" type="QTimeEvt" visibility="private"/>
+
+    <attribute name="flashCtr" type="uint8_t" visibility="private"/>
+
+    <attribute name="CARS_GREEN_MIN_TOUT" type="uint16_t" visibility="public" modifiers="static const">
+    <doc><![CDATA[
+Minimum green time for cars [ticks].
+    ]]></doc>
+    </attribute>
+
+<operation name="ctor" type="void" visibility="public">
+    <code><![CDATA[
+QActive_ctor(&me->super, Q_STATE_CAST(&Pelican_initial));
+QTimeEvt_ctorX(&me->timeout, &me->super, TIMEOUT_SIG, 0U);
+    ]]></code>
+</operation>
+
+<operation name="isFlashOn" type="bool" visibility="private" modifiers="const">
+    <code><![CDATA[
+return (me->flashCtr & 1U) == 0U;
+    ]]></code>
+</operation>
+
+<statechart>
+    <initial target="operational">
+    <action><![CDATA[
+QActive_subscribe(&me->super, PEDS_WAITING_SIG);
+    ]]></action>
+    </initial>
+
+<state name="operational">
+    <entry><![CDATA[
+BSP_signalCars(CARS_RED);
+BSP_signalPeds(PEDS_DONT_WALK);
+    ]]></entry>
+    <initial target="carsEnabled"/>
+    <history type="deep" target="carsEnabled"/>
+    <tran trig="OFF" target="offline"/>
+</state>
+
+<state name="carsEnabled" super="operational">
+    <exit><![CDATA[
+BSP_signalCars(CARS_RED);
+    ]]></exit>
+    <initial target="carsGreen"/>
+</state>
+
+<state name="carsGreen" super="carsEnabled">
+    <entry><![CDATA[
+BSP_signalCars(CARS_GREEN);
+QTimeEvt_armX(&me->timeout, CARS_GREEN_MIN_TOUT, 0U);
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <initial target="carsGreenNoPed"/>
+</state>
+
+<state name="carsGreenNoPed" super="carsGreen">
+    <trace ref="REQ-PEL-004"/>
+    <entry><![CDATA[
+BSP_showState("carsGreenNoPed");
+    ]]></entry>
+    <tran trig="PEDS_WAITING" target="carsGreenPedWait"/>
+    <tran trig="TIMEOUT" target="carsGreenInt"/>
+</state>
+
+<state name="carsGreenInt" super="carsGreen">
+    <entry><![CDATA[
+BSP_showState("carsGreenInt");
+    ]]></entry>
+    <tran trig="PEDS_WAITING" target="carsYellow"/>
+</state>
+
+<state name="carsGreenPedWait" super="carsGreen">
+    <entry><![CDATA[
+BSP_showState("carsGreenPedWait");
+    ]]></entry>
+    <tran trig="TIMEOUT" target="carsYellow"/>
+</state>
+
+<state name="carsYellow" super="carsEnabled">
+    <entry><![CDATA[
+BSP_showState("carsYellow");
+BSP_signalCars(CARS_YELLOW);
+QTimeEvt_armX(&me->timeout, CARS_YELLOW_TOUT, 0U);
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT" target="pedsEnabled"/>
+</state>
+
+<state name="pedsEnabled" super="operational">
+    <exit><![CDATA[
+BSP_signalPeds(PEDS_DONT_WALK);
+    ]]></exit>
+    <initial target="pedsWalk"/>
+</state>
+
+<state name="pedsWalk" super="pedsEnabled">
+    <entry><![CDATA[
+BSP_showState("pedsWalk");
+BSP_signalPeds(PEDS_WALK);
+QTimeEvt_armX(&me->timeout, PEDS_WALK_TOUT, 0U);
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT" target="pedsFlash"/>
+</state>
+
+<state name="pedsFlash" super="pedsEnabled">
+    <entry><![CDATA[
+BSP_showState("pedsFlash");
+QTimeEvt_armX(&me->timeout, PEDS_FLASH_TOUT, PEDS_FLASH_TOUT);
+me->flashCtr = (PEDS_FLASH_NUM * 2U) + 1U;
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT">
+    <choice>
+    <guard><![CDATA[
+me->flashCtr != 0U
+    ]]></guard>
+    <action><![CDATA[
+--me->flashCtr;
+    ]]></action>
+    <choice>
+    <guard><![CDATA[
+Pelican_isFlashOn(me)
+    ]]></guard>
+    <action><![CDATA[
+BSP_signalPeds(PEDS_DONT_WALK);
+    ]]></action>
+    </choice>
+    <else>
+    <action><![CDATA[
+BSP_signalPeds(PEDS_BLANK);
+    ]]></action>
+    </else>
+    </choice>
+    <else target="carsEnabled"/>
+    </tran>
+</state>
+
+<state name="offline">
+    <entry><![CDATA[
+BSP_showState("offline");
+QTimeEvt_armX(&me->timeout, OFF_FLASH_TOUT, OFF_FLASH_TOUT);
+me->flashCtr = 0U;
+    ]]></entry>
+    <exit><![CDATA[
+QTimeEvt_disarm(&me->timeout);
+    ]]></exit>
+    <tran trig="TIMEOUT">
+    <action><![CDATA[
+me->flashCtr ^= 1U;
+if ((me->flashCtr & 1U) == 0U) {
+    BSP_signalCars(CARS_RED);
+    BSP_signalPeds(PEDS_DONT_WALK);
+}
+else {
+    BSP_signalCars(CARS_BLANK);
+    BSP_signalPeds(PEDS_BLANK);
+}
+    ]]></action>
+    </tran>
+    <tran trig="ON" target="operational" via="history"/>
+</state>
+</statechart>
+</class>
+</package>
+
+<file path="src/pelican.c">
+    <text><![CDATA[
+#include "qpc.h"
+#include "bsp.h"
+#include "pelican.h"
+
+Q_DEFINE_THIS_FILE
+
+$define${AOs::Pelican}
+    ]]></text>
+</file>
+
+<file path="src/pelican.h">
+    <text><![CDATA[
+#ifndef PELICAN_H_
+#define PELICAN_H_
+
+$declare${AOs::Pelican}
+
+#endif /* PELICAN_H_ */
+    ]]></text>
+</file>
+
+</model>
+</script>
+<script type="text/plain" id="ex-qhsmtst"><?xml version="1.0" encoding="UTF-8"?>
+<model format="qmodel-1" framework="qpc">
+
+<package name="SMs">
+
+<class name="QHsmTst" super="QHsm">
+    <doc><![CDATA[
+QHsmTst is a contrived state machine from Chapter 2 of the
+PSiCC2 book for testing all possible transition topologies
+with up to 4-levels of state nesting.
+    ]]></doc>
+
+    <attribute name="foo" type="uint8_t" visibility="private"/>
+
+<statechart>
+    <initial target="s2">
+    <action><![CDATA[
+Q_UNUSED_PAR(par);
+me->foo = 0U;
+BSP_display("top-INIT;");
+
+QS_SIG_DICTIONARY(A_SIG, (void *)0);
+QS_SIG_DICTIONARY(B_SIG, (void *)0);
+QS_SIG_DICTIONARY(C_SIG, (void *)0);
+QS_SIG_DICTIONARY(D_SIG, (void *)0);
+QS_SIG_DICTIONARY(E_SIG, (void *)0);
+QS_SIG_DICTIONARY(F_SIG, (void *)0);
+QS_SIG_DICTIONARY(G_SIG, (void *)0);
+QS_SIG_DICTIONARY(H_SIG, (void *)0);
+QS_SIG_DICTIONARY(I_SIG, (void *)0);
+QS_SIG_DICTIONARY(IGNORE_SIG,    (void *)0);
+QS_SIG_DICTIONARY(TERMINATE_SIG, (void *)0);
+    ]]></action>
+    </initial>
+
+<state name="s">
+    <entry><![CDATA[
+BSP_display("s-ENTRY;");
+    ]]></entry>
+    <exit><![CDATA[
+BSP_display("s-EXIT;");
+    ]]></exit>
+    <initial target="s11">
+    <action><![CDATA[
+BSP_display("s-INIT;");
+    ]]></action>
+    </initial>
+    <tran trig="I">
+    <choice>
+    <guard><![CDATA[
+me->foo
+    ]]></guard>
+    <action><![CDATA[
+me->foo = 0U;
+BSP_display("s-I;");
+    ]]></action>
+    </choice>
+    </tran>
+    <tran trig="E" target="s11">
+    <action><![CDATA[
+BSP_display("s-E;");
+    ]]></action>
+    </tran>
+    <tran trig="TERMINATE">
+    <action><![CDATA[
+BSP_terminate(0);
+    ]]></action>
+    </tran>
+</state>
+
+<state name="s1" super="s">
+    <entry><![CDATA[
+BSP_display("s1-ENTRY;");
+    ]]></entry>
+    <exit><![CDATA[
+BSP_display("s1-EXIT;");
+    ]]></exit>
+    <initial target="s11">
+    <action><![CDATA[
+BSP_display("s1-INIT;");
+    ]]></action>
+    </initial>
+    <tran trig="I">
+    <action><![CDATA[
+BSP_display("s1-I;");
+    ]]></action>
+    </tran>
+    <tran trig="D">
+    <choice target="s">
+    <guard><![CDATA[
+!me->foo
+    ]]></guard>
+    <action><![CDATA[
+me->foo = 1U;
+BSP_display("s1-D;");
+    ]]></action>
+    </choice>
+    </tran>
+    <tran trig="A" target="s1">
+    <action><![CDATA[
+BSP_display("s1-A;");
+    ]]></action>
+    </tran>
+    <tran trig="B" target="s11">
+    <action><![CDATA[
+BSP_display("s1-B;");
+    ]]></action>
+    </tran>
+    <tran trig="F" target="s211">
+    <action><![CDATA[
+BSP_display("s1-F;");
+    ]]></action>
+    </tran>
+    <tran trig="C" target="s2">
+    <action><![CDATA[
+BSP_display("s1-C;");
+    ]]></action>
+    </tran>
+</state>
+
+<state name="s11" super="s1">
+    <entry><![CDATA[
+BSP_display("s11-ENTRY;");
+    ]]></entry>
+    <exit><![CDATA[
+BSP_display("s11-EXIT;");
+    ]]></exit>
+    <tran trig="H" target="s">
+    <action><![CDATA[
+BSP_display("s11-H;");
+    ]]></action>
+    </tran>
+    <tran trig="D">
+    <choice target="s1">
+    <guard><![CDATA[
+me->foo
+    ]]></guard>
+    <action><![CDATA[
+me->foo = 0U;
+BSP_display("s11-D;");
+    ]]></action>
+    </choice>
+    </tran>
+    <tran trig="G" target="s211">
+    <action><![CDATA[
+BSP_display("s11-G;");
+    ]]></action>
+    </tran>
+</state>
+
+<state name="s2" super="s">
+    <entry><![CDATA[
+BSP_display("s2-ENTRY;");
+    ]]></entry>
+    <exit><![CDATA[
+BSP_display("s2-EXIT;");
+    ]]></exit>
+    <initial target="s211">
+    <action><![CDATA[
+BSP_display("s2-INIT;");
+    ]]></action>
+    </initial>
+    <tran trig="I">
+    <choice>
+    <guard><![CDATA[
+!me->foo
+    ]]></guard>
+    <action><![CDATA[
+me->foo = 1U;
+BSP_display("s2-I;");
+    ]]></action>
+    </choice>
+    </tran>
+    <tran trig="F" target="s11">
+    <action><![CDATA[
+BSP_display("s2-F;");
+    ]]></action>
+    </tran>
+    <tran trig="C" target="s1">
+    <action><![CDATA[
+BSP_display("s2-C;");
+    ]]></action>
+    </tran>
+</state>
+
+<state name="s21" super="s2">
+    <entry><![CDATA[
+BSP_display("s21-ENTRY;");
+    ]]></entry>
+    <exit><![CDATA[
+BSP_display("s21-EXIT;");
+    ]]></exit>
+    <initial target="s211">
+    <action><![CDATA[
+BSP_display("s21-INIT;");
+    ]]></action>
+    </initial>
+    <tran trig="G" target="s1">
+    <action><![CDATA[
+BSP_display("s21-G;");
+    ]]></action>
+    </tran>
+    <tran trig="A" target="s21">
+    <action><![CDATA[
+BSP_display("s21-A;");
+    ]]></action>
+    </tran>
+    <tran trig="B" target="s211">
+    <action><![CDATA[
+BSP_display("s21-B;");
+    ]]></action>
+    </tran>
+</state>
+
+<state name="s211" super="s21">
+    <entry><![CDATA[
+BSP_display("s211-ENTRY;");
+    ]]></entry>
+    <exit><![CDATA[
+BSP_display("s211-EXIT;");
+    ]]></exit>
+    <tran trig="H" target="s">
+    <action><![CDATA[
+BSP_display("s211-H;");
+    ]]></action>
+    </tran>
+    <tran trig="D" target="s21">
+    <action><![CDATA[
+BSP_display("s211-D;");
+    ]]></action>
+    </tran>
+</state>
+</statechart>
+</class>
+</package>
+
+</model>
+</script>
+
+<!-- the same reader/writer/checker and gestures that the Node tests use -->
+<script src="js/qmodel-xml.js"></script>
+<script src="js/ops.js"></script>
+
+<script>
+"use strict";
+// =====================================================================
+// QModel spike 7: ONE combined outline view of the whole model (packages,
+// classes, members, statecharts with the linear notation, files); the separate
+// explorer of spike 6 is gone. Architecture rehearsal for the VS Code extension:
+//  - the XML text is the ONLY copy of the model (in VS Code: the document);
+//  - tree and diagram are rebuilt from the text after every change;
+//  - every gesture is computed from the current text by ops.js and applied
+//    as one line edit on one undo stack, shared with typing in the XML pane
+//    (in VS Code: one WorkspaceEdit on the document's own undo stack);
+//  - broken XML: the views keep the last valid version, gestures are off.
+// View state (folding, selection) is NOT in the text.
+// =====================================================================
+const Q = window.qmodelXml, OPS = window.qmodelOps;
+const { attr, kids } = Q;
+const $ = (id) => document.getElementById(id);
+
+// ------------------------------------------------------------ document --
+let text = "";               // the model
+let fileName = "";
+let undoStack = [], redoStack = [];
+let parsed = null;           // last tree that parsed (stays when the text breaks)
+let idx = null;              // index of `parsed`: keys <-> nodes
+let broken = null;           // { line, msg } while the text does not parse
+let problems = [];
+let lastLayout = null;
+
+// view state (never in the text)
+let sel = null;              // key of the selected element
+let hoverKey = null;
+const folded = new Set();    // keys of folded states and choice points
+let showActions = false;
+let hideCode = false;
+let showTree = true;          // vertical lines connecting sibling states (view option)
+let flashLines = new Set();
+let flashTimer = null;
+
+function loadText(t, name) {
+  text = t.replace(/\r\n?/g, "\n");
+  fileName = name;
+  undoStack = []; redoStack = [];
+  sel = null; folded.clear(); parsed = null;
+  $("xml").value = text;
+  update(true);
+  status(`Loaded ${name}: ${text.split("\n").length - 1} lines, ` +
+         `${problems.length} problem(s). All edits below are edits of this text.`);
+}
+
+// Apply edits to the text as ONE undo step (what a WorkspaceEdit is in VS Code).
+function commit(label, edits, source, coalesceWith) {
+  const before = coalesceWith ? coalesceWith.before : text;
+  const r = OPS.apply(before, edits);
+  if (coalesceWith) undoStack.pop();
+  undoStack.push({ label, edits, inverse: r.inverse, source, time: Date.now(), before });
+  redoStack.length = 0;
+  setText(r.text, r.inverse, source);
+}
+
+// Run a gesture: ops.js computes line edits from the CURRENT text.
+function gesture(label, make) {
+  if (broken) {
+    status("The XML has a syntax error: gestures are off until it is fixed or undone.", true);
+    return false;
+  }
+  let edits;
+  try { edits = make(text); }
+  catch (e) { status(label + ": " + e.message, true); return false; }
+  commit(label, edits, "gesture");
+  status(`${label}: ${OPS.linesTouched(edits)} line(s) changed, one undo step.`);
+  return true;
+}
+
+function undo() {
+  const e = undoStack.pop();
+  if (!e) { status("Nothing to undo."); return; }
+  const r = OPS.apply(text, e.inverse);
+  redoStack.push(e);
+  setText(r.text, r.inverse, "undo");
+  status(`Undone: ${e.label}.`);
+}
+function redo() {
+  const e = redoStack.pop();
+  if (!e) { status("Nothing to redo."); return; }
+  const r = OPS.apply(text, e.edits);
+  undoStack.push(e);
+  setText(r.text, r.inverse, "redo");
+  status(`Redone: ${e.label}.`);
+}
+
+// `inverse` edits of the change just applied tell which lines of the new text changed
+function setText(t, inverse, source) {
+  text = t;
+  if (source !== "typing") {
+    const ta = $("xml"), top = ta.scrollTop;
+    ta.value = text;
+    ta.scrollTop = top;
+  }
+  flashLines = new Set();
+  for (const e of inverse || []) {
+    if (e.del === 0) flashLines.add(e.line);
+    for (let i = 0; i < e.del; ++i) flashLines.add(e.line + i);
+  }
+  if (source !== "typing" && flashLines.size && !$("xmlpane").hidden) {
+    scrollXmlTo(Math.min(...flashLines));
+  }
+  update();
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { flashLines = new Set(); decorateXml(); }, 1500);
+}
+
+// Typing in the XML pane: one line edit per input, consecutive typing within
+// 1.5 s is one undo step (as editors do).
+function onTyping() {
+  const nt = $("xml").value.replace(/\r\n?/g, "\n");
+  if (nt === text) return;
+  const prev = undoStack[undoStack.length - 1];
+  const co = prev && prev.source === "typing" && Date.now() - prev.time < 1500 && !redoStack.length
+             ? prev : null;
+  const base = co ? co.before : text;
+  commit("typing in the XML", diffLines(base, nt), "typing", co);
+}
+function diffLines(a, b) {
+  const A = a.split("\n"), B = b.split("\n");
+  let p = 0;
+  while (p < A.length && p < B.length && A[p] === B[p]) ++p;
+  let s = 0;
+  while (s < A.length - p && s < B.length - p && A[A.length - 1 - s] === B[B.length - 1 - s]) ++s;
+  return [{ line: p + 1, del: A.length - p - s, ins: B.slice(p, B.length - s) }];
+}
+
+// ------------------------------------------------- parse and index (views) --
+function update(first) {
+  try {
+    parsed = Q.read(text).root;
+    idx = buildIndex(parsed);
+    broken = null;
+  } catch (e) {
+    if (!(e instanceof Q.ParseError)) throw e;
+    broken = { line: e.line, msg: e.message };
+    if (!parsed) { parsed = { tag: "model", attrs: [], children: [], line: 1, endLine: 1 }; idx = buildIndex(parsed); }
+  }
+  problems = broken ? [{ sev: "error", line: broken.line, msg: broken.msg }] : Q.check(text);
+  if (first) {
+    // a large model stays short: every class is folded except the first one with a statechart
+    const keep = idx.classes.find((c) => c.sc) || idx.classes[0];
+    for (const c of idx.classes) if (c !== keep) folded.add(K(c.node));
+  }
+  renderDiagram(); renderXml(); renderProblems(); renderBanner();
+  $("undoBtn").disabled = !undoStack.length;
+  $("redoBtn").disabled = !redoStack.length;
+}
+
+// Stable, name-based keys for elements, so selection and folding survive edits.
+function buildIndex(root) {
+  const ix = { byKey: new Map(), keyOf: new Map(), parent: new Map(), classes: [] };
+  const put = (n, k) => { if (!ix.byKey.has(k)) ix.byKey.set(k, n); ix.keyOf.set(n, k); };
+  const par = (n) => n.children.forEach((c) => { ix.parent.set(c, n); par(c); });
+  par(root);
+  const branches = (n, k) => {
+    let i = 0;
+    for (const b of n.children) {
+      if (b.tag === "choice" || b.tag === "else") { const bk = k + "." + i++; put(b, bk); branches(b, bk); }
+    }
+  };
+  const cls = (c) => {
+    const cn = attr(c, "name");
+    put(c, "C:" + cn);
+    const info = { node: c, name: cn, sc: kids(c, "statechart")[0] || null, states: [], byName: new Map() };
+    ix.classes.push(info);
+    for (const m of kids(c, "attribute").concat(kids(c, "operation"))) {
+      put(m, (m.tag === "attribute" ? "A:" : "O:") + cn + ":" + attr(m, "name"));
+    }
+    if (!info.sc) return;
+    put(info.sc, "SC:" + cn);
+    kids(info.sc, "initial").forEach((i) => put(i, "I:" + cn + ":"));
+    for (const s of kids(info.sc, "state")) {
+      const sn = attr(s, "name");
+      info.states.push(s);
+      if (!info.byName.has(sn)) info.byName.set(sn, s);
+      put(s, "S:" + cn + ":" + sn);
+      for (const t of ["entry", "exit"]) kids(s, t).forEach((b) => put(b, "E:" + cn + ":" + sn + ":" + t));
+      kids(s, "initial").forEach((i) => put(i, "I:" + cn + ":" + sn));
+      kids(s, "history").forEach((h) => put(h, "H:" + cn + ":" + sn));
+      kids(s, "tran").forEach((t, ti) => { const k = "T:" + cn + ":" + sn + ":" + ti; put(t, k); branches(t, k); });
+    }
+  };
+  const pkg = (p, path) => {
+    const key = "P:" + path + attr(p, "name");
+    put(p, key);
+    for (const c of p.children) {
+      if (c.tag === "package") pkg(c, path + attr(p, "name") + "::");
+      if (c.tag === "class") cls(c);
+      if (c.tag === "attribute" || c.tag === "operation") {
+        put(c, (c.tag === "attribute" ? "A:" : "O:") + key + ":" + attr(c, "name"));
+      }
+    }
+  };
+  for (const c of root.children) {
+    if (c.tag === "package") pkg(c, "");
+    if (c.tag === "file") put(c, "F:" + attr(c, "path"));
+  }
+  return ix;
+}
+const K = (n) => idx.keyOf.get(n);
+const node = (k) => (k ? idx.byKey.get(k) : undefined);
+// the class an element belongs to (each class's statechart is its own section)
+function infoOf(n) {
+  for (let p = n; p; p = idx.parent.get(p)) if (p.tag === "class") return idx.classes.find((c) => c.node === p);
+  return null;
+}
+const clsName = (n) => { const i = infoOf(n); return i ? i.name : null; };
+
+// state hierarchy of one class: tops and children in file order; cycles and
+// unknown superstates end up at top level (the checker reports them)
+function hierarchy(info) {
+  const childrenOf = new Map(), tops = [], orphans = new Set();
+  for (const s of info.states) {
+    const p = attr(s, "super"), ps = p !== undefined ? info.byName.get(p) : null;
+    if (p !== undefined && !ps) orphans.add(s);
+    if (ps && ps !== s) { if (!childrenOf.has(ps)) childrenOf.set(ps, []); childrenOf.get(ps).push(s); }
+    else tops.push(s);
+  }
+  const reach = new Set();
+  const walk = (s) => { if (reach.has(s)) return; reach.add(s); (childrenOf.get(s) || []).forEach(walk); };
+  tops.forEach(walk);
+  for (const s of info.states) if (!reach.has(s)) { orphans.add(s); tops.push(s); walk(s); }
+  return { tops, childrenOf, orphans, kidsOf: (s) => childrenOf.get(s) || [] };
+}
+function ownerState(n) {
+  for (let p = n; p; p = idx.parent.get(p)) if (p.tag === "state") return p;
+  return null;
+}
+const blockText = (n, tag) => { const b = kids(n, tag)[0]; return b ? b.lines.join("\n") : null; };
+// a brief: the text of a leading comment of an action or guard ("// text" or a
+// one-line "/* text */"), shown on the diagram without the comment marker, or null
+const briefOf = (code) => {
+  const first = code.split("\n").find((l) => l.trim() !== "");
+  if (!first) return null;
+  // ordinary comments only: "///", "//!", "/**", "/*!" are Doxygen doc comments
+  const m = /^\s*\/\/(?![\/!])\s?(.*)$/.exec(first) || /^\s*\/\*(?![*!])\s*(.*?)\s*\*\/\s*$/.exec(first);
+  return m ? m[1].trim() : null;
+};
+const firstLine = (s) => {
+  const ls = s.split("\n").filter((x) => x.trim() !== "");
+  return (ls[0] || "") + (ls.length > 1 ? " ..." : "");
+};
+
+// ------------------------------------------------------- selection sync --
+function select(key, from) {
+  sel = key;
+  const n = node(key);
+  if (n) {
+    reveal(n);
+    if (from !== "xml" && !$("xmlpane").hidden) scrollXmlTo(n.line);
+  }
+  renderDiagram(); decorateXml();
+  if (n && from === "xml") scrollRowIntoView(n);
+}
+// unfold everything that hides an element: its XML ancestors and its superstates
+function reveal(n) {
+  for (let p = idx.parent.get(n); p; p = idx.parent.get(p)) { const k = K(p); if (k) folded.delete(k); }
+  const info = infoOf(n);
+  const s = n.tag === "state" ? n : ownerState(n);
+  if (info && s) {
+    if (n !== s) folded.delete(K(s));
+    for (let p = info.byName.get(attr(s, "super")), g = 0; p && g < 100; p = info.byName.get(attr(p, "super")), ++g) {
+      folded.delete(K(p));
+    }
+  }
+}
+function scrollRowIntoView(n) {
+  const r = lastLayout && lastLayout.rows.find((x) => x.el === n);
+  const d = $("diagram");
+  if (r && (r.y < d.scrollTop + ROW || r.y > d.scrollTop + d.clientHeight - ROW)) d.scrollTop = r.y - d.clientHeight / 2;
+}
+// the innermost element whose lines contain `line` (for a click in the XML)
+function elementAt(line) {
+  let best = null;
+  for (const [n, k] of idx.keyOf) {
+    if (n.line <= line && line <= n.endLine && (!best || n.endLine - n.line < best.endLine - best.line)) best = n;
+  }
+  return best;
+}
+
+// ------------------------------------------------------------ rename (F2) --
+function startRename(key) {
+  const n = node(key);
+  if (!n) return;
+  const kind = n.tag;
+  if (kind === "choice") { editGuard(n); return; }
+  if (kind === "else") { status("An else segment has no guard to edit.", true); return; }
+  if (kind === "initial" || kind === "history") {
+    status("Change its target by dragging its arrowhead onto another state line.", true); return;
+  }
+  if (!["state", "tran", "attribute", "operation"].includes(kind)) {
+    status(kind === "class" || kind === "package"
+      ? "Renaming classes and packages also rewrites ${...} directives (decision 7); not in this spike."
+      : "Nothing to rename here.", true);
+    return;
+  }
+  const old = kind === "tran" ? attr(n, "trig") : attr(n, "name");
+  const cn = clsName(n), line = n.line;
+  ask(`Rename ${kind === "tran" ? "trigger" : kind} ${old}:`, old, kind === "tran" ? "SIG, or A, B" : "name", (v) => {
+    v = v.trim();
+    if (!v || v === old) return;
+    const newKey = key.replace(/:[^:]+$/, ":" + v);
+    if (kind === "state") {
+      if (gesture(`rename state ${old} -> ${v}`, (t) => OPS.renameState(t, cn, old, v))) {
+        if (folded.delete(key)) folded.add(newKey);
+        sel = newKey; update();
+      }
+    } else if (kind === "tran") {
+      gesture(`change trigger ${old} -> ${v}`, (t) => OPS.setAttribute(t, line, "trig", v));
+    } else if (gesture(`rename ${kind} ${old} -> ${v}`, (t) => OPS.setAttribute(t, line, "name", v))) {
+      sel = newKey; update();
+    }
+  });
+}
+
+// ------------------------------------------------- the combined outline view --
+const ROW = 24, INDENT = 26, MARGIN = 16, LANE_GAP = 14, FONT = '13px "Segoe UI", Arial, sans-serif';
+const mctx = document.createElement("canvas").getContext("2d");
+function textWidth(s, bold) { mctx.font = (bold ? "600 " : "") + FONT; return mctx.measureText(s).width; }
+const uids = new WeakMap();
+let nextUid = 1;
+const uid = (n) => { if (!uids.has(n)) uids.set(n, nextUid++); return uids.get(n); };
+const isTranRow = (r) => ["initial", "history", "tran", "branch"].includes(r.kind);
+const hasBranches = (n) => n.children.some((c) => c.tag === "choice" || c.tag === "else");
+
+// One outline for the whole model. Structure rows (packages, classes, members,
+// statecharts, files) and behavior rows (states, transitions) use the same
+// indentation, folding, selection and gestures. Each class's statechart is a
+// section of the outline; lanes never cross sections, so one global lane
+// assignment serves all statecharts.
+function layoutModel() {
+  const rows = [];
+  const push = (r) => { rows.push(r); return r; };
+  const emitMachine = (info, base, scRow) => {
+    const h = hierarchy(info);
+    const supOf = (s) => info.byName.get(attr(s, "super"));
+    // the state actually drawn for a state: its topmost folded ancestor, or itself
+    info.visible = (s) => {
+      let v = s;
+      const seen = new Set([s]);
+      for (let p = supOf(s); p && !seen.has(p); p = supOf(p)) { seen.add(p); if (folded.has(K(p))) v = p; }
+      return v;
+    };
+    for (const i of kids(info.sc, "initial")) push({ kind: "initial", el: i, depth: base, info });
+    const emitTran = (t, d, parentRow) => {
+      const r = push({ kind: t.tag === "tran" ? "tran" : "branch", el: t, depth: d, hasChoice: hasBranches(t), parentRow, info });
+      if (r.hasChoice && !folded.has(K(t))) {
+        for (const b of t.children) if (b.tag === "choice" || b.tag === "else") emitTran(b, d + 1, r);
+      }
+    };
+    const emitted = new Set();
+    const emitState = (s, d, prow) => {
+      if (emitted.has(s)) return;
+      emitted.add(s);
+      const r = push({ kind: "state", el: s, depth: d, orphan: h.orphans.has(s), info, tparent: prow });
+      if (folded.has(K(s))) return;
+      for (const t of ["entry", "exit"]) for (const b of kids(s, t)) push({ kind: t, el: b, depth: d + 1, info });
+      for (const i of kids(s, "initial")) push({ kind: "initial", el: i, depth: d + 1, info });
+      for (const x of kids(s, "history")) push({ kind: "history", el: x, depth: d + 1, info });
+      for (const t of kids(s, "tran")) emitTran(t, d + 1, null);
+      for (const c of h.kidsOf(s)) emitState(c, d + 1, r);
+    };
+    h.tops.forEach((s) => emitState(s, base, scRow));
+  };
+  const member = (m, d, prow) => push({ kind: m.tag, el: m, depth: d, tparent: prow });
+  const emitClass = (c, d, prow) => {
+    const info = idx.classes.find((i) => i.node === c);
+    const r = push({ kind: "class", el: c, depth: d, tparent: prow });
+    if (folded.has(K(c))) return;
+    for (const m of c.children) if (m.tag === "attribute" || m.tag === "operation") member(m, d + 1, r);
+    if (info && info.sc) {
+      const sr = push({ kind: "statechart", el: info.sc, depth: d + 1, tparent: r });
+      if (!folded.has(K(info.sc))) emitMachine(info, d + 2, sr);
+    }
+  };
+  const emitPkg = (p, d, prow) => {
+    const r = push({ kind: "package", el: p, depth: d, tparent: prow });
+    if (folded.has(K(p))) return;
+    for (const c of p.children) {
+      if (c.tag === "attribute" || c.tag === "operation") member(c, d + 1, r);
+      else if (c.tag === "class") emitClass(c, d + 1, r);
+      else if (c.tag === "package") emitPkg(c, d + 1, r);
+    }
+  };
+  for (const c of parsed.children) {
+    if (c.tag === "package") emitPkg(c, 0, null);
+    else if (c.tag === "file") push({ kind: "file", el: c, depth: 0, tparent: null });
+  }
+
+  rows.forEach((r, i) => {
+    r.index = i;
+    r.y = MARGIN + 10 + i * ROW;
+    r.x = MARGIN + r.depth * INDENT;
+    // Briefs (QM's "brief", 2026-11-19): if an action or guard starts with a
+    // comment ("// text"), the diagram shows its text, without the "//", instead
+    // of the code, always (also with Actions off). Without a brief, Actions shows
+    // the first code line.
+    const a = r.el.tag !== "entry" && r.el.tag !== "exit" ? blockText(r.el, "action")
+            : r.kind === "entry" || r.kind === "exit" ? r.el.lines.join("\n") : null;
+    const ab = a !== null && !hideCode ? briefOf(a) : null;
+    const act = hideCode ? "" : ab !== null ? " / " + ab : a !== null && showActions ? " / " + firstLine(a) : "";
+    const actCls = ab !== null ? "label code brief" : "label code";
+    const dots = folded.has(K(r.el)) ? " ..." : "";
+    switch (r.kind) {
+      case "package":    r.parts = [[attr(r.el, "name") + dots, "mname"], ["  package", "mdetail"]]; break;
+      case "class":      r.parts = [[attr(r.el, "name") + dots, "mname"],
+                                    [attr(r.el, "super") ? " : " + attr(r.el, "super") : "", "mdetail"]]; break;
+      case "attribute":  r.parts = [[attr(r.el, "name"), "mname"], [" : " + attr(r.el, "type"), "mdetail"]]; break;
+      case "operation":  r.parts = [[attr(r.el, "name") + "()", "mname"], [" : " + attr(r.el, "type"), "mdetail"]]; break;
+      case "statechart": r.parts = [["SM" + dots, "mname"], ["  statechart", "mdetail"]]; break;
+      case "file":       r.parts = [[attr(r.el, "path"), "mname"], ["  file", "mdetail"]]; break;
+      case "state":   r.parts = [[attr(r.el, "name") + dots, "sname"]]; break;
+      case "entry": case "exit":
+        r.parts = [[r.kind, "label trig"], [act, actCls]];
+        break;
+      case "initial": r.parts = [["", "label code"], [act.replace(/^ \/ /, "/ "), actCls]]; break;
+      case "history": r.parts = [["", "label code"],
+                                 [act.replace(/^ \/ /, "/ "), actCls]]; break;
+      case "tran": {
+        const tg = attr(r.el, "trig") || "?";
+        r.parts = [[tg, "label trig" + (tg === "CATCH_ALL" ? " catchall" : "")], [act, actCls]];
+        break;
+      }
+      case "branch": {
+        const gc = r.el.tag === "choice" ? blockText(r.el, "guard") || "" : null;
+        const gb = gc !== null ? briefOf(gc) : null;   // a guard is always shown, by its brief if it has one
+        const g = gc === null ? "[else]" : "[" + (gb !== null ? gb : firstLine(gc)) + "]";
+        r.parts = [[g, "label trig" + (gb !== null ? " brief" : "")], [act, actCls]];
+        break;
+      }
+    }
+    // Choice rendering (user's sketch, 2026-11-19):
+    //   <> TIMEOUT                 the diamond leads the trigger row
+    //      |                       a spine drops from under the trigger label
+    //      +--[guard1] ----[]      each branch hangs from the spine
+    //      +--[guard2]
+    //      |  |                    a nested choice: its own spine under
+    //      |  +--[nested] --[]     the parent branch's guard label
+    //      +--[else] --------> lane
+    // Same geometry as states: branches step in by exactly one INDENT (like
+    // substates), the diamond takes the place of a state's fold marker, the
+    // label starts where a state name starts, and the spine runs where the
+    // tree lines of substates run (under the fold marker, x + 4).
+    const lead = r.kind === "initial" ? 14 : r.kind === "history" ? 18 : r.kind === "state" ? 14
+               : r.kind === "branch" ? 14 : r.kind === "tran" && r.hasChoice ? 14
+               : ["package", "class", "statechart"].includes(r.kind) ? 30          // fold marker + icon
+               : ["attribute", "operation", "file"].includes(r.kind) ? 16 : 0;    // icon
+    r.textX = r.x + lead;
+    r.labelEnd = r.textX + r.parts.reduce((w, [s, cls]) => w + textWidth(s, /trig|sname|mname/.test(cls)), 0);
+    // the spine drops from under the fold marker / diamond (x + 4), not from under
+    // the label, so it never touches descenders (p, y, g) of the label (user, 2026-11-20)
+    if (r.hasChoice) r.spineX = r.x + 4;
+  });
+
+  const stateRow = new Map(rows.filter((r) => r.kind === "state").map((r) => [r.el, r]));
+  const links = [];
+  for (const r of rows) {
+    if (!isTranRow(r) || r.hasChoice) continue;
+    const tg = attr(r.el, "target");
+    if (tg === undefined) { r.internal = true; continue; }
+    const info = r.info;
+    const st = info.byName.get(tg);
+    const tr = st && stateRow.get(info.visible(st));
+    if (!tr) { r.unresolved = true; continue; }
+    const via = attr(r.el, "via") === "history";
+    const hist = via ? kids(st, "history")[0] : null;
+    links.push({ row: r, target: tr, targetName: tg, via, histType: hist ? attr(hist, "type") : null,
+                 lo: Math.min(r.index, tr.index), hi: Math.max(r.index, tr.index) });
+  }
+  // Shared lanes: all links that end at the same place (same target rail, or the
+  // same H marker) form one "net" and share one lane, like traces joining at a pad.
+  const nets = new Map();
+  for (const L of links) {
+    const key = L.target.index + (L.via ? ":h" : "");
+    if (!nets.has(key)) nets.set(key, { members: [], lo: L.lo, hi: L.hi });
+    const n = nets.get(key); n.members.push(L); n.lo = Math.min(n.lo, L.lo); n.hi = Math.max(n.hi, L.hi);
+  }
+  const netList = [...nets.values()];
+  netList.sort((a, b) => (a.hi - a.lo) - (b.hi - b.lo) || a.lo - b.lo);
+  const lanes = [];
+  for (const N of netList) {
+    let k = lanes.findIndex((lane) => lane.every((o) => N.hi < o.lo || N.lo > o.hi));
+    if (k < 0) { k = lanes.length; lanes.push([]); }
+    lanes[k].push(N);
+    for (const L of N.members) { L.lane = k; L.net = N; }
+  }
+  // lanes start right of the behavior rows; structure rows have no rails and may extend further
+  const labelMax = Math.max(200, ...rows.filter((r) => r.info).map((r) => r.labelEnd + (r.internal || r.unresolved ? 40 : 0)));
+  const lane0 = labelMax + 24;
+  for (const L of links) L.x = lane0 + L.lane * LANE_GAP;
+  const right = Math.max(lane0 + Math.max(lanes.length, 1) * LANE_GAP + 16,
+                         ...rows.map((r) => r.labelEnd + 24));
+  return { rows, links, right, height: MARGIN * 2 + rows.length * ROW + 10, lane0, stateRow };
+}
+
+const NS = "http://www.w3.org/2000/svg";
+const svg = $("svg");
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.append(e);
+  return e;
+}
+function tagClass(r) {
+  if (!isTranRow(r)) return "";
+  return "tr t-" + uid(r.el) + (r.parentRow ? " b-" + uid(r.parentRow.el) : "");
+}
+// ONE focus rule for hover and selection (user, 2026-11-19). The focused
+// element is the hovered one while the mouse is over a row that has a focus,
+// otherwise the selected one.
+//  - transition / segment / initial / history: its path (row, lane, arrow,
+//    its choice segments, the segments above it) is hot; its source state and
+//    all superstates are lit (src); the rest is dimmed;
+//  - state (also its entry/exit rows): the state and all its superstates are
+//    lit, exactly as for one of its transitions; its own transitions are hot,
+//    all others are dimmed;
+//  - structure rows (package, class, members, SM, files): no focus.
+function focusRow(n) {
+  if (!n || !lastLayout) return null;
+  const r = lastLayout.rows.find((x) => x.el === n);
+  return r && (isTranRow(r) || ["state", "entry", "exit"].includes(r.kind)) ? r : null;
+}
+function applyFocus() {
+  clearHot();
+  const r = focusRow(node(hoverKey)) || focusRow(node(sel));
+  if (!r) return;
+  svg.classList.add("focus");
+  if (isTranRow(r)) {
+    const id = uid(r.el);
+    const parts = [`.t-${id}`];
+    if (r.hasChoice) parts.push(`.b-${id}`);
+    for (let p = r.parentRow; p; p = p.parentRow) parts.push(`.t-${uid(p.el)}`);
+    svg.querySelectorAll(parts.join(",")).forEach((e) => e.classList.add("hot"));
+  } else {
+    // a state: its OWN transitions stay highlighted (initial, history, regular,
+    // their choice segments), so the events it handles show at a glance
+    const st = r.el.tag === "state" ? r.el : ownerState(r.el);
+    const parts = lastLayout.rows.filter((x) => isTranRow(x) && ownerState(x.el) === st).map((x) => `.t-${uid(x.el)}`);
+    if (parts.length) svg.querySelectorAll(parts.join(",")).forEach((e) => e.classList.add("hot"));
+  }
+  for (let s = r.el.tag === "state" ? r.el : ownerState(r.el), g = 0; s && g < 100; ++g) {
+    svg.querySelectorAll(`.s-${uid(s)}`).forEach((e) => e.classList.add("src"));
+    svg.querySelectorAll(`.e-${uid(s)}`).forEach((e) => e.classList.add("lit"));
+    s = r.info && r.info.byName.get(attr(s, "super"));
+  }
+  // Shared lanes: a shared lane carries several transitions; paint the hot ones last,
+  // so the hot part of a shared lane is not covered by its dimmed neighbors, and
+  // light every junction dot that lies on a hot part of a lane
+  const gl = svg.querySelectorAll("g")[2];
+  if (gl) [...gl.querySelectorAll(".hot")].forEach((e) => gl.appendChild(e));
+  // a junction dot is hot only with its own transition; on another transition's hot lane
+  // it stays dimmed, showing a junction that is not part of the path in focus
+}
+function hoverOn(k) { hoverKey = k; applyFocus(); decorateXml(); }
+function clearHot() {
+  svg.classList.remove("focus");
+  svg.querySelectorAll(".hot, .src, .lit").forEach((e) => e.classList.remove("hot", "src", "lit"));
+}
+svg.addEventListener("mouseleave", () => hoverOn(null));
+
+function renderDiagram() {
+  svg.replaceChildren();
+  renderLevels();
+  if (!idx) return;
+  const L = layoutModel();
+  lastLayout = L;
+  svg.setAttribute("width", L.right);
+  svg.setAttribute("height", L.height);
+  const gRows = el("g", {}, svg), gLines = el("g", {}, svg), gLanes = el("g", {}, svg), gTop = el("g", {}, svg);
+  const selNode = node(sel);
+
+  for (const r of L.rows) {
+    const k = K(r.el);
+    const hit = el("rect", { x: 0, y: r.y - ROW / 2, width: L.right, height: ROW,
+                             class: "rowhit" + (r.el === selNode ? " rowsel" : "") }, gRows);
+    hit.addEventListener("mouseenter", () => hoverOn(k));
+    hit.addEventListener("click", () => { select(k); $("diagram").focus(); });
+    const tip = r.kind === "entry" || r.kind === "exit" ? r.el.lines.join("\n")
+              : [r.el.tag === "choice" ? "[" + (blockText(r.el, "guard") || "") + "]" : null, blockText(r.el, "action")]
+                  .filter((x) => x).join("\n/ ");
+    if (tip) el("title", {}, hit).textContent = tip;
+    const tc = tagClass(r) + (r.el === selNode ? " selt" : "");
+
+    if (["package", "class", "statechart", "attribute", "operation", "file"].includes(r.kind)) {
+      // structure row: [fold marker] icon name detail
+      const foldable = ["package", "class", "statechart"].includes(r.kind) && r.el.children.length > 0;
+      if (foldable) {
+        const isF = folded.has(k);
+        const tri = isF ? `M${r.x},${r.y - 5} L${r.x + 8},${r.y} L${r.x},${r.y + 5} z`
+                        : `M${r.x - 1},${r.y - 3} L${r.x + 9},${r.y - 3} L${r.x + 4},${r.y + 3} z`;
+        el("path", { d: tri, class: "fold" }, gTop).addEventListener("click", (ev) => { ev.stopPropagation(); toggle(k); });
+      }
+      const ix = ["package", "class", "statechart"].includes(r.kind) ? r.x + 14 : r.x;
+      if (r.kind === "attribute" || r.kind === "operation") el("circle", { cx: ix + 5, cy: r.y, r: 5, class: "ic-" + r.kind }, gTop);
+      else el("rect", { x: ix, y: r.y - 5, width: 10, height: 10, rx: 2, class: "ic-" + r.kind }, gTop);
+      const t = el("text", { x: r.textX, y: r.y + 4.5, class: "mname" + (r.el === selNode ? " sel" : "") }, gTop);
+      for (const [s, cls] of r.parts) if (s) el("tspan", { class: cls }, t).textContent = s;
+      t.addEventListener("click", () => { select(k); $("diagram").focus(); });
+      t.addEventListener("dblclick", () => startRename(k));
+      continue;
+    }
+    if (r.kind === "state") {
+      const isF = folded.has(k);
+      const ss = r.el === selNode ? " sel" : "";
+      const hasKids = hierarchy(r.info).kidsOf(r.el).length > 0 || r.el.children.length > 0;
+      if (hasKids) {
+        const tri = isF ? `M${r.x},${r.y - 5} L${r.x + 8},${r.y} L${r.x},${r.y + 5} z`
+                        : `M${r.x - 1},${r.y - 3} L${r.x + 9},${r.y - 3} L${r.x + 4},${r.y + 3} z`;
+        el("path", { d: tri, class: "fold" }, gTop).addEventListener("click", (ev) => { ev.stopPropagation(); toggle(k); });
+      }
+      const name = el("text", { x: r.textX, y: r.y + 4.5, class: `sname s-${uid(r.el)}${ss}${r.orphan ? " orphan" : ""}` }, gTop);
+      name.textContent = r.parts[0][0];
+      name.addEventListener("click", () => { select(k); $("diagram").focus(); });
+      name.addEventListener("dblclick", () => startRename(k));
+      name.addEventListener("mouseenter", () => hoverOn(k));
+      const x1 = r.textX + textWidth(name.textContent, true) + 8;
+      el("line", { x1, y1: r.y, x2: L.right - 8, y2: r.y, class: `sline s-${uid(r.el)}${ss}`, "data-row": r.index }, gLines);
+      continue;
+    }
+
+    // entry/exit rows belong to their state: lit with it, dimmed otherwise
+    const ee = r.kind === "entry" || r.kind === "exit" ? ` ee e-${uid(ownerState(r.el))}` : "";
+    const t = el("text", { x: r.textX, y: r.y + 4.5, class: tc + ee }, gTop);
+    for (const [s, cls] of r.parts) {
+      if (!s) continue;
+      el("tspan", { class: cls || "label" }, t).textContent = s;
+    }
+    if (r.kind === "initial") el("circle", { cx: r.x + 4, cy: r.y, r: 4, class: "tfill " + tc }, gTop);
+    if (r.kind === "history") {
+      el("circle", { cx: r.x + 6, cy: r.y, r: 6.5, class: "hmark hrow " + tc, "data-row": r.index }, gTop);
+      el("text", { x: r.x + 6, y: r.y + 3, class: "htext hrow " + tc, "data-row": r.index }, gTop).textContent = attr(r.el, "type") === "deep" ? "H*" : "H";
+    }
+    if (r.kind === "entry" || r.kind === "exit") continue;
+
+    const startX = r.labelEnd + 6;
+    if (r.kind === "branch" && r.parentRow) {
+      // "+--<>[guard]": tick from the parent's spine to a diamond in front of every guard
+      // like the tree lines of states: each branch owns its segment of the spine,
+      // from the parent's row down to its own row, so hover lights up only its path
+      const cx = r.x + 4;      // the slot of a state's fold marker
+      const p = r.parentRow, sx = p.spineX;
+      el("polyline", { points: `${sx},${p.y + 7} ${sx},${r.y} ${cx - 5},${r.y}`, class: "tline " + tc }, gLines);
+      el("path", { d: `M${cx - 5},${r.y} L${cx},${r.y - 5} L${cx + 5},${r.y} L${cx},${r.y + 5} z`,
+                   class: "diamond " + tc }, gTop);
+    }
+    if (r.hasChoice) {
+      if (r.kind === "tran") {
+        // a trigger with choices folds like a state: same marker, same slot
+        const isF = folded.has(k);
+        const tri = isF ? `M${r.x},${r.y - 5} L${r.x + 8},${r.y} L${r.x},${r.y + 5} z`
+                        : `M${r.x - 1},${r.y - 3} L${r.x + 9},${r.y - 3} L${r.x + 4},${r.y + 3} z`;
+        const f = el("path", { d: tri, class: "fold" }, gTop);
+        f.addEventListener("click", (ev) => { ev.stopPropagation(); toggle(k); });
+        el("title", {}, f).textContent = "Click to fold or unfold the choice";
+      }
+      if (folded.has(k) || !L.rows.some((x) => x.parentRow === r)) {
+        el("text", { x: r.labelEnd + 8, y: r.y + 4.5, class: "label code" }, gTop).textContent = "...";
+      }
+      continue;
+    }
+    if (r.internal) {
+      el("line", { x1: startX, y1: r.y, x2: startX + 24, y2: r.y, class: "tline " + tc }, gLines);
+      el("rect", { x: startX + 24, y: r.y - 4, width: 8, height: 8, class: "tfill " + tc }, gTop);
+      if (r.kind === "tran" || r.kind === "branch") {
+        // a dangling end: drag it onto a state line to attach it there
+        const eh = el("circle", { cx: startX + 28, cy: r.y, r: 9, class: "arrowhit" }, gTop);
+        el("title", {}, eh).textContent = "Dangling end: drag onto a state line to attach it, or press c for a choice segment";
+        eh.addEventListener("pointerdown", (ev) => startDrag(ev, { row: r, x: startX + 28, dangling: true }));
+      }
+    }
+    if (r.unresolved) {
+      el("line", { x1: startX, y1: r.y, x2: startX + 24, y2: r.y, class: "tline " + tc }, gLines);
+      const q = el("text", { x: startX + 27, y: r.y + 4.5, class: "bad" }, gTop);
+      q.textContent = "? " + attr(r.el, "target");
+    }
+  }
+
+  // tree lines: for every visible state, a segment from its superstate's row
+  // (or the top of the diagram) down to its own row, ending in a short tick
+  // at its fold marker. Siblings share the vertical line. Each segment carries
+  // the state's s-<uid> class, so hover highlights it like the state's rail.
+  // (structure rows get the same tree lines, in grey: packages > classes > members > SM > states)
+  if (showTree) {
+    for (const r of L.rows) {
+      if (!("tparent" in r)) continue;
+      const pr = r.tparent;
+      // the vertical runs under the superstate's fold marker (its x + 4), well left of
+      // the superstate's name, so it never touches its descenders (user, 2026-11-20)
+      const x = r.x - INDENT + 4, y0 = pr ? pr.y + 7 : MARGIN - 6;
+      const ss = r.el === selNode ? " sel" : "";
+      const cls = r.kind === "state" ? `vline s-${uid(r.el)}${ss}` : "vline mline";
+      el("polyline", { points: `${x},${y0} ${x},${r.y} ${r.x - 3},${r.y}`, class: cls }, gLines);
+    }
+  }
+
+  for (const k of L.links) {
+    const r = k.row, ty = k.target.y, dir = ty > r.y ? 1 : -1, tc = tagClass(r) + (r.el === selNode ? " selt" : "");
+    el("line", { x1: r.labelEnd + 6, y1: r.y, x2: k.x, y2: r.y, class: "tline " + tc }, gLines);
+    el("line", { x1: k.x, y1: r.y + dir * 6, x2: k.x, y2: ty - dir * 9, class: "halo " + tc }, gLanes);
+    if (k.via) {
+      // into history: the arrow goes INTO the target's H / H* marker, which sits on the state line
+      const R = 6.5, tip = ty - dir * R, base = tip - dir * 7;
+      el("line", { x1: k.x, y1: r.y, x2: k.x, y2: base, class: "tline " + tc }, gLanes);
+      el("path", { d: `M${k.x - 4},${base} L${k.x + 4},${base} L${k.x},${tip} z`, class: "tfill " + tc }, gLanes);
+      el("circle", { cx: k.x, cy: ty, r: R, class: "hmark " + tc }, gLanes);
+      el("text", { x: k.x, y: ty + 3, class: "htext " + tc }, gLanes).textContent =
+        k.histType === "deep" ? "H*" : k.histType === "shallow" ? "H" : "?";
+    } else {
+      el("line", { x1: k.x, y1: r.y, x2: k.x, y2: ty - dir * 7, class: "tline " + tc }, gLanes);
+      el("path", { d: `M${k.x - 4},${ty - dir * 8} L${k.x + 4},${ty - dir * 8} L${k.x},${ty - dir * 1} z`, class: "tfill " + tc }, gLanes);
+    }
+    const lh = el("line", { x1: k.x, y1: r.y, x2: k.x, y2: ty, class: "lanehit" }, gLanes);
+    lh.addEventListener("mouseenter", () => hoverOn(K(r.el)));
+    lh.addEventListener("click", () => select(K(r.el)));
+    // drag the arrowhead onto another state line to retarget
+    const ah = el("circle", { cx: k.x, cy: k.via ? ty - dir * 10 : ty - dir * 4, r: 8, class: "arrowhit" }, gLanes);
+    el("title", {}, ah).textContent = "Drag onto another state line to change the target; drop anywhere else to make it internal (or press i)";
+    ah.addEventListener("pointerdown", (ev) => startDrag(ev, k));
+  }
+  // Shared lanes: a junction dot where a link joins its net's lane in the middle (a T),
+  // not where the lane turns (a corner at the net's first or last row)
+  for (const k of L.links) {
+    const N = k.net, r = k.row;
+    if (!N || N.members.length < 2) continue;
+    const lo = Math.min(...N.members.map((m) => Math.min(m.row.y, m.target.y)));
+    const hi = Math.max(...N.members.map((m) => Math.max(m.row.y, m.target.y)));
+    if (r.y > lo && r.y < hi) el("circle", { cx: k.x, cy: r.y, r: 3, class: "jdot tfill " + tagClass(r) }, gTop);
+  }
+  applyFocus();
+}
+function toggle(k) { if (folded.has(k)) folded.delete(k); else folded.add(k); renderDiagram(); }
+
+// ---- drag an arrowhead to another state line: one gesture, one line edit
+let drag = null;
+function svgY(ev) { return ev.clientY - svg.getBoundingClientRect().top; }
+function startDrag(ev, link) {
+  if (broken) { status("Gestures are off while the XML has a syntax error.", true); return; }
+  ev.preventDefault(); ev.stopPropagation();
+  select(K(link.row.el));
+  const L = lastLayout;
+  const line = el("line", { x1: link.x, y1: link.row.y, x2: link.x, y2: svgY(ev), class: "dragline" }, svg);
+  // history (user, 2026-11-20): a transition or choice segment can also be dropped
+  // on a state's HISTORY ROW, which connects it through that history (via="history")
+  const canHist = ["tran", "choice", "else"].includes(link.row.el.tag);
+  if (canHist) svg.querySelectorAll(".hrow").forEach((x) => x.classList.add("droptarget"));
+  status((link.dangling ? "Drop on a state line to attach the end there" :
+          "Drop on a state line to retarget it") +
+         (canHist ? ", on a history row (H/H*) to enter that state's history" : "") +
+         (link.dangling ? "." : "; drop anywhere else to make it internal."));
+  drag = { link, line, over: null };
+  const move = (e) => {
+    const y = svgY(e);
+    drag.dropX = e.clientX - svg.getBoundingClientRect().left;
+    line.setAttribute("y2", y);
+    const r = L.rows.find((x) => (x.kind === "state" || (canHist && x.kind === "history")) && Math.abs(x.y - y) < ROW / 2);
+    svg.querySelectorAll(".sline.drop, .hrow.drop").forEach((x) => x.classList.remove("drop"));
+    drag.over = r || null;
+    if (r) svg.querySelectorAll(r.kind === "state" ? `.sline[data-row="${r.index}"]` : `.hrow[data-row="${r.index}"]`)
+              .forEach((x) => x.classList.add("drop"));
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+    const r = drag.over, row = drag.link.row, dangling = drag.link.dangling, dropX = drag.dropX;
+    drag = null;
+    const toState = r && (r.kind === "state" ? r.el : ownerState(r.el));
+    const to = toState && attr(toState, "name");
+    const via = r && r.kind === "history" ? "history" : undefined;
+    if (r && (to !== drag_name(row) || via !== attr(row.el, "via"))) {
+      const line = row.el.line;
+      gesture(`${dangling ? "attach" : "retarget"} ${describe(row.el)} -> ${to}${via ? " (history)" : ""}`,
+              (t) => OPS.connect(t, line, to, via));
+    } else if (!r && !dangling && row.kind !== "initial" && row.kind !== "history" && dropX !== undefined) {
+      // as in QM: an end dropped anywhere but on a state line dangles (internal transition)
+      makeInternal(row.el);
+    } else {
+      renderDiagram();
+    }
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+const drag_name = (row) => attr(row.el, "target");
+// turn a transition or segment that goes to a state into an internal one (dangling end)
+function makeInternal(n) {
+  if (!n || !["tran", "choice", "else"].includes(n.tag)) {
+    status("Select a transition or a choice segment.", true); return false;
+  }
+  if (attr(n, "target") === undefined) {
+    status(hasBranches(n) ? "This end has choice segments; it goes nowhere by itself." : "It is already internal.", true);
+    return false;
+  }
+  const line = n.line;
+  return gesture(`make ${describe(n)} internal`,
+                 (t) => OPS.setAttribute(t, line, { target: undefined, via: undefined }));
+}
+function describe(n) {
+  const s = ownerState(n);
+  const where = s ? attr(s, "name") : "top";
+  if (n.tag === "tran") return `${where}/${attr(n, "trig")}`;
+  if (n.tag === "choice" || n.tag === "else") return `${where}/${n.tag}`;
+  return `${where}/${n.tag}`;
+}
+
+// ------------------------------------------------------ column 3: XML pane --
+const LINE_H = 18;
+function renderXml() {
+  const n = text.split("\n").length;
+  const g = $("gutter");
+  if (g.dataset.n !== String(n)) {
+    g.textContent = Array.from({ length: n }, (_, i) => i + 1).join("\n");
+    g.dataset.n = String(n);
+    $("hl").replaceChildren(...Array.from({ length: n }, () => document.createElement("div")));
+  }
+  decorateXml();
+}
+function decorateXml() {
+  if ($("xmlpane").hidden) return;
+  const divs = $("hl").children;
+  const s = node(sel), h = node(hoverKey);
+  const err = new Set(problems.map((p) => p.line));
+  for (let i = 0; i < divs.length; ++i) {
+    const ln = i + 1;
+    let c = "";
+    if (s && ln >= s.line && ln <= s.endLine && !broken) c = "sel";
+    else if (h && ln >= h.line && ln <= h.endLine && !broken) c = "hov";
+    if (flashLines.has(ln)) c = "flash";
+    if (err.has(ln)) c += " err";
+    if (divs[i].className !== c) divs[i].className = c;
+  }
+}
+function syncScroll() {
+  const ta = $("xml");
+  $("hl").style.transform = `translate(${-ta.scrollLeft}px, ${-ta.scrollTop}px)`;
+  $("gutter").scrollTop = ta.scrollTop;
+}
+function scrollXmlTo(line) {
+  const ta = $("xml");
+  const y = (line - 1) * LINE_H;
+  if (y < ta.scrollTop + LINE_H || y > ta.scrollTop + ta.clientHeight - 3 * LINE_H) {
+    ta.scrollTop = Math.max(0, y - ta.clientHeight / 3);
+  }
+  syncScroll();
+}
+function caretLine() {
+  const ta = $("xml");
+  return ta.value.slice(0, ta.selectionStart).split("\n").length;
+}
+function onCaret() {
+  if (broken || document.activeElement !== $("xml")) return;
+  const n = elementAt(caretLine());
+  const k = n && K(n);
+  if (k && k !== sel) select(k, "xml");
+}
+function goToLine(line) {
+  if ($("xmlpane").hidden) { $("showXml").checked = true; showXml(true); }
+  const ta = $("xml");
+  const lines = ta.value.split("\n");
+  let pos = 0;
+  for (let i = 0; i < line - 1 && i < lines.length; ++i) pos += lines[i].length + 1;
+  ta.focus();
+  ta.setSelectionRange(pos, pos);
+  scrollXmlTo(line);
+  onCaret();
+}
+function showXml(on) {
+  $("xmlpane").hidden = !on;
+  renderXml();
+  if (on && node(sel)) scrollXmlTo(node(sel).line);
+  syncScroll();
+}
+
+// ---------------------------------------------------- problems, banner --
+function renderProblems() {
+  const box = $("problems");
+  box.replaceChildren();
+  const head = document.createElement("div");
+  const ne = problems.filter((p) => p.sev === "error").length;
+  head.textContent = problems.length ? `Problems: ${ne} error(s), ${problems.length - ne} warning(s)` : "No problems.";
+  box.append(head);
+  for (const p of problems) {
+    const d = document.createElement("div");
+    d.className = "p " + p.sev;
+    d.textContent = `line ${p.line}: ${p.sev}: ${p.msg}`;
+    d.addEventListener("click", () => goToLine(p.line));
+    box.append(d);
+  }
+}
+function renderBanner() {
+  const b = $("banner");
+  $("diagram").classList.toggle("stale", !!broken);
+  if (!broken) { b.hidden = true; return; }
+  b.hidden = false;
+  b.replaceChildren(
+    document.createTextNode(`Syntax error at line ${broken.line}: ${broken.msg}. ` +
+      `Showing the last valid version; gestures are off.`));
+  const go = document.createElement("button");
+  go.textContent = "Go to error";
+  go.onclick = () => goToLine(broken.line);
+  const un = document.createElement("button");
+  un.textContent = "Undo";
+  un.onclick = undo;
+  b.append(go, un);
+}
+function status(msg, isErr) {
+  const s = $("status");
+  s.textContent = msg;
+  s.title = msg;               // full text on hover when it is cut off
+  s.className = isErr ? "err" : "";
+}
+
+// -------------------------------------------------------------- keyboard --
+function siblingsOf(s) {
+  const info = infoOf(s);
+  const h = hierarchy(info);
+  const p = info.byName.get(attr(s, "super"));
+  return p && !h.orphans.has(s) ? h.kidsOf(p) : h.tops;
+}
+function moveSel(delta) {
+  if (!lastLayout || !lastLayout.rows.length) return;
+  const rows = lastLayout.rows;
+  let i = rows.findIndex((r) => r.el === node(sel));
+  i = i < 0 ? 0 : Math.max(0, Math.min(rows.length - 1, i + delta));
+  select(K(rows[i].el));
+  const y = rows[i].y, d = $("diagram");
+  if (y < d.scrollTop + ROW || y > d.scrollTop + d.clientHeight - ROW) d.scrollTop = y - d.clientHeight / 2;
+}
+// a one-line input in the toolbar (Enter applies, Esc cancels)
+let promptDone = null;
+function ask(label, value, placeholder, done) {
+  $("pLabel").textContent = label;
+  $("pInput").value = value;
+  $("pInput").placeholder = placeholder + "  (Enter / Esc)";
+  $("prompt").hidden = false;
+  promptDone = done;
+  $("pInput").focus(); $("pInput").select();
+}
+$("pInput").addEventListener("keydown", (ev) => {
+  ev.stopPropagation();
+  if (ev.key === "Escape") { $("prompt").hidden = true; $("diagram").focus(); return; }
+  if (ev.key !== "Enter") return;
+  if (promptDone(ev.target.value) !== false) { $("prompt").hidden = true; $("diagram").focus(); }
+});
+function openNewTran() {
+  const s = node(sel);
+  const st = s && (s.tag === "state" ? s : ownerState(s));
+  if (!st) { status("Select a state first.", true); return; }
+  const name = attr(st, "name");
+  ask(`New transition in ${name}:`, "", "TRIG -> target, or TRIG (internal)", (v) => {
+    const m = /^\s*([A-Za-z_][\w]*(?:\s*,\s*[A-Za-z_]\w*)*)\s*(?:->\s*([A-Za-z_]\w*))?\s*$/.exec(v);
+    if (!m) { status('Write "TRIG -> target", "A, B -> target", or "TRIG" for an internal transition.', true); return false; }
+    gesture(`new transition ${m[1]} in ${name}`, (t) => OPS.addTran(t, clsName(st), name, m[1], m[2]));
+  });
+}
+// QM drawing order: a choice segment attaches to a dangling end
+function openNewSegment() {
+  const n = node(sel);
+  if (!n || !["tran", "choice", "else"].includes(n.tag)) {
+    status("Select a transition or a choice segment with a dangling end.", true); return;
+  }
+  if (attr(n, "target") !== undefined) {
+    status("This end goes to a state. Drag its arrowhead into the label area to make it dangle first.", true); return;
+  }
+  const line = n.line, d = describe(n);
+  ask(`Choice segment on ${d}, guard:`, "", "C expression, or else", (v) => {
+    const g = v.trim();
+    if (!g) return false;
+    gesture(`choice segment [${g}] on ${d}`, (t) => OPS.addBranch(t, line, g === "else" ? null : g));
+  });
+}
+function editGuard(n) {
+  const g = blockText(n, "guard") || "";
+  if (g.includes("\n")) { status("This guard has several lines: edit it in the XML (Show XML).", true); return; }
+  const line = n.line;
+  ask("Guard:", g, "C expression", (v) => {
+    if (!v.trim()) return false;
+    gesture(`edit guard [${v.trim()}]`, (t) => OPS.setGuard(t, line, v.trim()));
+  });
+}
+
+document.addEventListener("keydown", (ev) => {
+  const inXml = ev.target === $("xml");
+  const inInput = ev.target.tagName === "INPUT" || ev.target.tagName === "SELECT";
+  const ctrl = ev.ctrlKey || ev.metaKey;
+  // ONE undo stack for gestures and typing (the browser's own textarea undo is bypassed)
+  if (ctrl && !inInput && (ev.key === "z" || ev.key === "Z" || ev.key === "y")) {
+    ev.preventDefault();
+    if (ev.key === "y" || ev.shiftKey) redo(); else undo();
+    return;
+  }
+  if (inXml || inInput) return;
+  const n = node(sel);
+  switch (ev.key) {
+    case "Escape":
+      if (sel) { sel = null; renderDiagram(); decorateXml(); status("Selection cleared."); }
+      break;
+    case "F2":
+      ev.preventDefault();
+      if (n && n.tag === "choice") editGuard(n);
+      else if (n && n.tag === "else") status("An else segment has no guard to edit.", true);
+      else if (n) startRename(sel);
+      break;
+    case "Tab": {
+      ev.preventDefault();
+      if (!n || n.tag !== "state") { status("Tab / Shift+Tab work on a selected state.", true); break; }
+      const name = attr(n, "name");
+      if (ev.shiftKey) {
+        gesture(`Shift+Tab ${name}`, (t) => OPS.outdent(t, clsName(n), name));
+      } else {
+        const sib = siblingsOf(n), i = sib.indexOf(n);
+        if (i <= 0) { status(`${name} has no previous sibling to move under.`, true); break; }
+        const p = attr(sib[i - 1], "name");
+        gesture(`Tab ${name} under ${p}`, (t) => OPS.reparent(t, clsName(n), name, p));
+      }
+      break;
+    }
+    case "Delete": case "Backspace": {
+      if (n && (n.tag === "choice" || n.tag === "else")) {
+        const p = idx.parent.get(n), pk = K(p), line = n.line;
+        if (gesture(`delete ${n.tag === "else" ? "else" : "choice"} segment of ${describe(p)}`,
+                    (t) => OPS.deleteBranch(t, line))) select(pk);
+        ev.preventDefault();
+        break;
+      }
+      if (!n || n.tag !== "tran") { status("Delete works on a selected transition or choice segment.", true); break; }
+      const st = ownerState(n);
+      const sk = K(st);
+      if (gesture(`delete transition ${attr(n, "trig")} in ${attr(st, "name")}`,
+                  (t) => OPS.deleteTran(t, clsName(st), attr(st, "name"), attr(n, "trig")))) {
+        select(sk);
+      }
+      ev.preventDefault();
+      break;
+    }
+    case "t": case "T": ev.preventDefault(); openNewTran(); break;
+    case "h": {                                   // enter the target through its history, or not
+      ev.preventDefault();
+      if (!n || !["tran", "choice", "else"].includes(n.tag) || attr(n, "target") === undefined) {
+        status("h works on a transition or choice segment that goes to a state.", true); break;
+      }
+      const to = attr(n, "target"), on = attr(n, "via") !== "history", line = n.line;
+      gesture(`${describe(n)} -> ${to}${on ? " via history" : " (plain)"}`,
+              (t) => OPS.connect(t, line, to, on ? "history" : undefined));
+      break;
+    }
+    case "H": {                                   // Shift+H: history of the state: none -> shallow -> deep -> none
+      ev.preventDefault();
+      const s = n && (n.tag === "state" ? n : ownerState(n));
+      if (!s) { status("Shift+H works on a selected state.", true); break; }
+      const h = kids(s, "history")[0], cur = h ? attr(h, "type") : undefined;
+      const next = cur === undefined ? "shallow" : cur === "shallow" ? "deep" : undefined;
+      const name = attr(s, "name");
+      gesture(`${name}: ${next ? next + " history" : "no history"}`,
+              (t) => OPS.setHistory(t, clsName(s), name, next));
+      break;
+    }
+    case "0": ev.preventDefault(); showLevel(Infinity); break;
+    case "1": case "2": case "3": case "4": case "5": case "6": case "7": case "8": case "9":
+      if (ctrl || ev.altKey) break;
+      ev.preventDefault();
+      if (+ev.key <= maxLevel()) showLevel(+ev.key); else status(`The deepest level is ${maxLevel()}.`);
+      break;
+    case "c": case "C": ev.preventDefault(); openNewSegment(); break;
+    case "i": case "I": ev.preventDefault(); makeInternal(n); break;
+    case "ArrowDown": case "ArrowUp": {
+      ev.preventDefault();
+      const dir = ev.key === "ArrowDown" ? 1 : -1;
+      if ((ev.altKey || ev.ctrlKey || ev.metaKey) && n && (n.tag === "choice" || n.tag === "else")) {
+        // reorder segments: evaluation order is meaning
+        const p = idx.parent.get(n), pk = K(p);
+        const i = p.children.filter((c) => c.tag === "choice" || c.tag === "else").indexOf(n);
+        if (gesture(`move segment ${dir < 0 ? "up" : "down"}`, (t) => OPS.moveBranch(t, n.line, dir))) {
+          select(pk + "." + (i + dir));
+        }
+      } else moveSel(dir);
+      break;
+    }
+  }
+});
+
+// ---------------------------------------------------------------- wiring --
+$("xml").addEventListener("input", onTyping);
+$("xml").addEventListener("scroll", syncScroll);
+for (const e of ["click", "keyup"]) $("xml").addEventListener(e, onCaret);
+$("xml").addEventListener("keydown", (ev) => {
+  if (ev.key === "Tab") {                       // insert 4 spaces, not focus change
+    ev.preventDefault();
+    document.execCommand("insertText", false, "    ");
+  }
+});
+$("showXml").onchange = (e) => showXml(e.target.checked);
+$("showActions").onchange = (e) => { showActions = e.target.checked; renderDiagram(); };
+$("showTree").onchange = (e) => { showTree = e.target.checked; renderDiagram(); };
+$("undoBtn").onclick = undo;
+$("redoBtn").onclick = redo;
+// Outline levels (user, 2026-11-20), instead of "Fold all" / "Unfold all".
+// The level of a row is its indentation within its statechart: top-level
+// states are level 1, everything a state owns (entry, exit, transitions) and
+// its substates are one level deeper, and choice segments one level deeper than
+// their trigger. "Level N" shows the rows down to level N: every state or choice
+// at level >= N that has anything inside it is folded, the rest unfolded.
+// Packages, classes and members are not affected. Folding stays view state.
+function foldables() {
+  const out = [];
+  if (!idx) return out;
+  for (const info of idx.classes) {
+    if (!info.sc) continue;
+    const h = hierarchy(info);
+    const walkChoices = (n, lv) => {
+      for (const c of n.children) {
+        if ((c.tag === "tran" || c.tag === "choice" || c.tag === "else") && hasBranches(c)) {
+          out.push({ k: K(c), lv });
+          walkChoices(c, lv + 1);
+        }
+      }
+    };
+    const seen = new Set();
+    const walkState = (s, lv) => {
+      if (seen.has(s)) return;
+      seen.add(s);
+      if (h.kidsOf(s).length || s.children.length) out.push({ k: K(s), lv });
+      walkChoices(s, lv + 1);
+      h.kidsOf(s).forEach((c) => walkState(c, lv + 1));
+    };
+    h.tops.forEach((s) => walkState(s, 1));
+  }
+  return out;
+}
+const maxLevel = () => foldables().reduce((m, f) => Math.max(m, f.lv), 0);
+function showLevel(n) {              // n = Infinity: all levels
+  for (const f of foldables()) { if (f.lv >= n) folded.add(f.k); else folded.delete(f.k); }
+  renderDiagram();
+  status(n === Infinity ? "Showing all levels." : `Showing levels 1 to ${n}.`);
+}
+// the level the current folding corresponds to exactly, or null (after manual folding)
+function currentLevel() {
+  const fs = foldables(), max = fs.reduce((m, f) => Math.max(m, f.lv), 0);
+  for (let n = 1; n <= max + 1; ++n) {
+    if (fs.every((f) => folded.has(f.k) === (f.lv >= n))) return n > max ? Infinity : n;
+  }
+  return null;
+}
+function renderLevels() {
+  const box = $("levels"), max = maxLevel(), cur = currentLevel();
+  box.replaceChildren("Level ");
+  const add = (label, n) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (cur === n) b.className = "on";
+    b.onclick = () => showLevel(n);
+    box.append(b);
+  };
+  for (let n = 1; n <= Math.min(max, 9); ++n) add(String(n), n);
+  add("All", Infinity);
+}
+const examples = {
+  toaster: ["toaster.qmodel", $("ex-toaster").textContent],
+  pelican: ["pelican.qmodel", $("ex-pelican").textContent],
+  qhsmtst: ["qhsmtst.qmodel", $("ex-qhsmtst").textContent],
+};
+let lastChoice = "toaster";
+$("modelSel").onchange = (e) => {
+  const v = e.target.value;
+  if (v === "file") { $("fileIn").click(); e.target.value = lastChoice; return; }
+  lastChoice = v;
+  loadText(examples[v][1], examples[v][0]);
+};
+$("fileIn").onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => loadText(rd.result, f.name);
+  rd.readAsText(f);
+  e.target.value = "";
+};
+$("download").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "application/xml" }));
+  a.download = fileName || "model.qmodel";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+loadText(examples.toaster[1], examples.toaster[0]);
+</script>
+</body>
+</html>
